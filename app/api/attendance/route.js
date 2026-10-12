@@ -2,6 +2,7 @@
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, isValidDate, clampStr, parseId } from '@/lib/api';
 import { currentSchoolYear } from '@/lib/school';
+import { visibleClassIds, attendanceAllowed, studentClassesById } from '@/lib/scope';
 
 const STATUSES = new Set(['present', 'absent', 'late', 'excused']);
 
@@ -34,6 +35,8 @@ export async function GET(request) {
     if (from) { where.push('a.date >= ?'); params.push(from); }
     if (to) { where.push('a.date <= ?'); params.push(to); }
     if (className) { where.push('s.class_name = ?'); params.push(className); }
+    const visible = await visibleClassIds(session);
+    if (visible) { where.push('s.class_id = ANY(?)'); params.push(visible); }
 
     const sql = `SELECT a.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name
                  FROM attendance a
@@ -55,6 +58,10 @@ export async function POST(request) {
 
     const year = await currentSchoolYear();
     if (!year) return error('No current school year');
+    const classOf = await studentClassesById(records.map((r) => parseId(r.studentId)).filter(Boolean));
+    for (const r of records) {
+        if (!(await attendanceAllowed(session, classOf.get(parseId(r.studentId)) ?? null))) return error('Forbidden: this student is not in your classes', 403);
+    }
     for (const r of records) {
         if (!parseId(r.studentId)) return error('Invalid studentId');
         if (!isValidDate(r.date)) return error('Invalid date');

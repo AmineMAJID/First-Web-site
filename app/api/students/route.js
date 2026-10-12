@@ -3,9 +3,10 @@ import { db, tx } from '@/lib/db';
 import { hashPassword, generateTempPassword } from '@/lib/password';
 import { json, error, readJson, requirePermission, uniqueUsername, nextCode, clampStr, isValidDate, parseId } from '@/lib/api';
 import { currentSchoolYear, resolveClassFor } from '@/lib/school';
+import { visibleClassIds } from '@/lib/scope';
 
 export async function GET(request) {
-    const { response } = requirePermission(request, 'students.view');
+    const { session, response } = requirePermission(request, 'students.view');
     if (response) return response;
 
     const { searchParams } = new URL(request.url);
@@ -35,6 +36,12 @@ export async function GET(request) {
     if (classId) {
         query += ' AND s.class_id = ?';
         params.push(classId);
+    }
+    // A teacher only sees the students of the classes they teach or head
+    const visible = await visibleClassIds(session);
+    if (visible) {
+        query += ' AND s.class_id = ANY(?)';
+        params.push(visible);
     }
     query += ' ORDER BY u.full_name ASC';
     return json(await db.all(query, params));

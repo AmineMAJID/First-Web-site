@@ -2,7 +2,7 @@
 // Every account is created by the test itself through the admin API: no demo data is assumed.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { BASE, ADMIN, Client, loginWith2FA, adminLogin, uniq } from './helpers.js';
+import { BASE, ADMIN, Client, loginWith2FA, adminLogin, uniq, classIdOf } from './helpers.js';
 
 let admin;
 let teacher;   // { client, id, userId }
@@ -45,6 +45,10 @@ before(async () => {
     const tRow = (await admin.req('/api/teachers')).data.find((x) => x.username === t.data.teacher.username);
     const login = await loginWith2FA(t.data.teacher.username, t.data.teacher.password);
     teacher = { client: login.client, id: tRow.id, userId: tRow.userId };
+
+    // The teacher teaches Mathematics in the student's class (teachers only reach their classes)
+    const aff = await admin.req('/api/teaching-assignments', { method: 'POST', body: { teacherId: tRow.id, classId: await classIdOf(admin, className), subject: 'Mathematics' } });
+    assert.equal(aff.status, 201, JSON.stringify(aff.data));
 });
 
 test('student sees only own data and cannot reach admin resources', async () => {

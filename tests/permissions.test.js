@@ -2,7 +2,7 @@
 // Requires a running server (BASE_URL) and the env vars in tests/helpers.js.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { BASE, ADMIN, Client, loginWith2FA, adminLogin, uniq } from './helpers.js';
+import { BASE, ADMIN, Client, loginWith2FA, adminLogin, uniq, classIdOf } from './helpers.js';
 
 let admin;          // admin Client
 let student;        // { id, className }
@@ -157,6 +157,8 @@ test('changing a role takes effect at once, on pages and on the API, without new
 test('Teacher to Supervisor example: presence moves from the teacher role to the supervisor role', async () => {
     const t = await admin.req('/api/teachers', { method: 'POST', body: { fullName: uniq('Teacher Move'), subject: 'Art' } });
     const teacher = await loginWith2FA(t.data.teacher.username, t.data.teacher.password);
+    const aff = await admin.req('/api/teaching-assignments', { method: 'POST', body: { teacherId: (await admin.req('/api/teachers')).data.find((x) => x.username === t.data.teacher.username).id, classId: await classIdOf(admin, student.className), subject: 'Art' } });
+    assert.equal(aff.status, 201, JSON.stringify(aff.data));
     const before = await roleRow('teacher');
     const originalPerms = before.permissions;
     const supervisor = await makeRole(['attendance.record', 'students.view']);

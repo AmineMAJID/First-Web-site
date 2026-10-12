@@ -98,3 +98,11 @@ export async function adminLogin() {
 }
 
 export const uniq = (prefix) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+// Id of a class of the current school year, from its name (the tests create classes by name)
+export async function classIdOf(admin, name) {
+    const r = await admin.req('/api/classes');
+    const found = r.data.classList.find((c) => c.name === name);
+    if (!found) throw new Error(`class "${name}" not found`);
+    return found.id;
+}

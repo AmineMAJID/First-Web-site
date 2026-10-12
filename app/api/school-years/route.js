@@ -16,6 +16,7 @@ export async function GET(request) {
 }
 
 // Body: { startYear: 2027, copyClassesFrom?: schoolYearId }. Creates 2027-2028 and its terms.
+// With copyClassesFrom, classes, head teachers and teaching assignments are copied too.
 export async function POST(request) {
     const { response } = requirePermission(request, 'classes.manage');
     if (response) return response;
@@ -36,8 +37,14 @@ export async function POST(request) {
                 [row.id, row.id, row.id]);
             if (copyFrom) {
                 // Same class names and levels, without students (they are assigned again for the new year)
-                await t.run(`INSERT INTO classes (name, level, school_year_id)
-                             SELECT name, level, ? FROM classes WHERE school_year_id = ?`, [row.id, copyFrom]);
+                // Same class names, levels and head teachers, without students (they are assigned again)
+                await t.run(`INSERT INTO classes (name, level, school_year_id, head_teacher_id)
+                             SELECT name, level, ?, head_teacher_id FROM classes WHERE school_year_id = ?`, [row.id, copyFrom]);
+                await t.run(`INSERT INTO teaching_assignments (teacher_id, class_id, subject)
+                             SELECT ta.teacher_id, nc.id, ta.subject
+                             FROM teaching_assignments ta
+                             JOIN classes oc ON oc.id = ta.class_id AND oc.school_year_id = ?
+                             JOIN classes nc ON nc.name = oc.name AND nc.school_year_id = ?`, [copyFrom, row.id]);
             }
             return row.id;
         });

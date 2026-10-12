@@ -37,6 +37,8 @@ before(async () => {
     const tRow = (await admin.req('/api/teachers')).data.find((x) => x.username === t.data.teacher.username);
     const login = await loginWith2FA(t.data.teacher.username, t.data.teacher.password);
     teacher = { client: login.client, id: tRow.id };
+    const aff = await admin.req('/api/teaching-assignments', { method: 'POST', body: { teacherId: tRow.id, classId: classA.id, subject: 'History' } });
+    assert.equal(aff.status, 201, JSON.stringify(aff.data));
 });
 
 test('a class is listed for the current year with its student count and head teacher', async () => {
@@ -76,7 +78,7 @@ test('a class that still has students cannot be deleted', async () => {
 
 test('grades and attendance are recorded for the current year and checked against its terms and dates', async () => {
     const today = new Date().toISOString().slice(0, 10);
-    const ok = await teacher.client.req('/api/grades', { method: 'POST', body: { grades: [{ studentId: student.id, subject: 'History ' + uniq('').slice(-3), grade: 12, maxGrade: 20, term: 'Term 2' }] } });
+    const ok = await teacher.client.req('/api/grades', { method: 'POST', body: { grades: [{ studentId: student.id, subject: 'History', grade: 12, maxGrade: 20, term: 'Term 2' }] } });
     assert.equal(ok.status, 200, JSON.stringify(ok.data));
 
     const badTerm = await teacher.client.req('/api/grades', { method: 'POST', body: { grades: [{ studentId: student.id, subject: 'X', grade: 1, term: 'Term 9' }] } });

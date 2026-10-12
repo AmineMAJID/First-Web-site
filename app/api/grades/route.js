@@ -2,6 +2,7 @@
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, clampStr, parseId } from '@/lib/api';
 import { currentSchoolYear, termsOf } from '@/lib/school';
+import { visibleClassIds, gradableSubjects, studentClassesById } from '@/lib/scope';
 
 const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name,
                      tu.full_name AS teacher_name
@@ -39,6 +40,8 @@ export async function GET(request) {
         }
         if (className) { where.push('s.class_name = ?'); params.push(className); }
     }
+    const visible = await visibleClassIds(session);
+    if (visible) { where.push('s.class_id = ANY(?)'); params.push(visible); }
     if (term) { where.push('g.term = ?'); params.push(term); }
     if (subject) { where.push('g.subject = ?'); params.push(subject); }
 
@@ -75,6 +78,16 @@ export async function POST(request) {
         if (!terms.has(clampStr(g.term, 30) || 'Term 1')) return error(`Unknown term "${g.term}" for the current school year`);
     }
 
+    // A teacher can only grade the subjects they teach in the student's class
+    const classOf = await studentClassesById(grades.map((g) => parseId(g.studentId)).filter(Boolean));
+    const allowed = new Map();
+    for (const g of grades) {
+        const classId = classOf.get(parseId(g.studentId));
+        if (!allowed.has(classId)) allowed.set(classId, await gradableSubjects(session, classId));
+        const subjects = allowed.get(classId);
+        if (subjects && !subjects.has(clampStr(g.subject, 60))) return error('Forbidden: you do not teach this subject in this class', 403);
+    }
+
     await tx(async (t) => {
         for (const g of grades) {
             await t.run(`
@@ -100,6 +113,9 @@ export async function DELETE(request) {
     if (!id) return error('id is required');
     const grade = await db.get('SELECT * FROM grades WHERE id = ?', [id]);
     if (!grade) return error('Grade not found', 404);
+    const gradeClass = (await db.get('SELECT class_id FROM students WHERE id = ?', [grade.student_id]))?.class_id ?? null;
+    const subjects = await gradableSubjects(session, gradeClass);
+    if (subjects && !subjects.has(grade.subject)) return error('Forbidden', 403);
     if (session.role === 'teacher') {
         const teacher = await db.get('SELECT id FROM teachers WHERE user_id = ?', [session.id]);
         if (grade.teacher_id && grade.teacher_id !== teacher?.id) return error('Forbidden', 403);

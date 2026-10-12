@@ -12,6 +12,8 @@ export default function AdminClasses() {
     const [data, setData] = useState({ classList: [], schoolYear: null });
     const [teachers, setTeachers] = useState([]);
     const [years, setYears] = useState([]);
+    const [assignments, setAssignments] = useState([]);
+    const [newAssignment, setNewAssignment] = useState({ teacherId: '', classId: '', subject: '' });
     const [loading, setLoading] = useState(true);
     const [newClass, setNewClass] = useState({ name: '', level: '', headTeacherId: '' });
     const [newYear, setNewYear] = useState({ startYear: '', copyClassesFrom: '' });
@@ -21,6 +23,7 @@ export default function AdminClasses() {
         api('/api/classes').then(setData),
         api('/api/school-years').then(setYears),
         api('/api/teachers').then(setTeachers).catch(() => {}),
+        api('/api/teaching-assignments').then(setAssignments).catch(() => {}),
     ]).catch((e) => toast.error(e.message)).finally(() => setLoading(false)), [toast]);
 
     useEffect(() => { load(); }, [load]);
@@ -59,9 +62,18 @@ export default function AdminClasses() {
         }, 'Année scolaire créée');
     };
 
+    const addAssignment = (e) => {
+        e.preventDefault();
+        run(async () => {
+            await api('/api/teaching-assignments', { method: 'POST', body: { teacherId: Number(newAssignment.teacherId), classId: Number(newAssignment.classId), subject: newAssignment.subject } });
+            setNewAssignment({ teacherId: '', classId: '', subject: '' });
+        }, 'Affectation ajoutée');
+    };
+
     const runConfirm = async () => {
         const { type, item } = confirm;
         setConfirm(null);
+        if (type === 'assignment') await run(() => api(`/api/teaching-assignments/${item.id}`, { method: 'DELETE' }), 'Affectation supprimée');
         if (type === 'class') await run(() => api(`/api/classes/${item.id}`, { method: 'DELETE' }), 'Classe supprimée');
         if (type === 'year') await run(() => api(`/api/school-years/${item.id}`, { method: 'DELETE' }), 'Année supprimée');
     };
@@ -138,6 +150,55 @@ export default function AdminClasses() {
                         </div>
                     </>
                 )}
+            </div>
+
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+                <h2 className="card-title">Affectations des enseignants</h2>
+                <p className="text-muted">Un enseignant ne voit et ne note que les élèves des classes où il enseigne (ou dont il est professeur principal pour les présences).</p>
+                {current && (
+                    <form onSubmit={addAssignment} className="form-row" style={{ alignItems: 'flex-end', marginBottom: '1rem' }}>
+                        <div className="form-group">
+                            <label>Enseignant</label>
+                            <select required value={newAssignment.teacherId} onChange={e => setNewAssignment({ ...newAssignment, teacherId: e.target.value })}>
+                                <option value="">—</option>
+                                {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Classe</label>
+                            <select required value={newAssignment.classId} onChange={e => setNewAssignment({ ...newAssignment, classId: e.target.value })}>
+                                <option value="">—</option>
+                                {data.classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Matière</label>
+                            <input required maxLength={60} value={newAssignment.subject} onChange={e => setNewAssignment({ ...newAssignment, subject: e.target.value })} />
+                        </div>
+                        <button className="btn btn-primary" type="submit"><Plus size={16} /> Affecter</button>
+                    </form>
+                )}
+                <div className="table-container">
+                    <table>
+                        <thead><tr><th>Enseignant</th><th>Classe</th><th>Matière</th><th></th></tr></thead>
+                        <tbody>
+                            {assignments.length === 0 && <tr><td colSpan={4}>Aucune affectation pour cette année.</td></tr>}
+                            {assignments.map(a => (
+                                <tr key={a.id}>
+                                    <td>{a.teacherName}</td>
+                                    <td>{a.className}</td>
+                                    <td>{a.subject}</td>
+                                    <td>
+                                        <button className="btn btn-outline" aria-label={`Supprimer l'affectation ${a.teacherName} ${a.className} ${a.subject}`}
+                                            onClick={() => setConfirm({ type: 'assignment', item: a, message: `Retirer ${a.teacherName} de ${a.subject} en ${a.className} ?` })}>
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div className="card">
