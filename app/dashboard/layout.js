@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/lib/LanguageContext';
 import { ToastProvider } from '@/components/Toast';
+import NotificationBell from '@/components/NotificationBell';
 import { FEATURES } from '@/lib/permissions';
 
 const FEATURE_ICONS = { LayoutDashboard, BarChart3, UserCog, Shield, Users, GraduationCap, BookOpen, ClipboardCheck, Calendar, MessageSquare, Settings };
@@ -204,6 +205,7 @@ export default function DashboardLayout({ children }) {
                                 </div>
                             </div>
                             <div style={styles.headerRight}>
+                                <NotificationBell />
                                 <div style={{ position: 'relative' }}>
                                     <button
                                         onClick={() => setShowLangMenu(!showLangMenu)}

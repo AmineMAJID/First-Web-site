@@ -2,6 +2,7 @@
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, clampStr } from '@/lib/api';
 import { visibleClassIds } from '@/lib/scope';
+import { notifyUsers, notifyRole } from '@/lib/notify';
 
 export async function GET(request) {
     const { session, response } = requirePermission(request, 'messages.view');
@@ -65,6 +66,7 @@ export async function POST(request) {
         if (session.role === 'parent') return error('Forbidden', 403);
         await db.run(`INSERT INTO messages (sender_id, recipient_role, subject, body, is_announcement) VALUES (?, ?, ?, ?, TRUE)`,
             [session.id, recipientRole, subject, messageBody]);
+        await notifyRole(db, recipientRole, { kind: 'announcement', title: 'Nouvelle annonce', body: subject, link: '/dashboard/messages' });
         return json({ success: true, count: 1 }, 201);
     }
 
@@ -99,6 +101,7 @@ export async function POST(request) {
             await t.run('INSERT INTO messages (sender_id, recipient_id, subject, body, is_announcement) VALUES (?, ?, ?, ?, FALSE)',
                 [session.id, id, subject, messageBody]);
         }
+        await notifyUsers(t, ids, { kind: 'message', title: 'Nouveau message', body: subject, link: '/dashboard/messages' });
     });
     return json({ success: true, count: ids.length }, 201);
 }

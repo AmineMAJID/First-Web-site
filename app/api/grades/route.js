@@ -3,6 +3,7 @@ import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, clampStr, parseId } from '@/lib/api';
 import { currentSchoolYear, termsOf } from '@/lib/school';
 import { visibleClassIds, gradableSubjects, studentClassesById, childStudentIds } from '@/lib/scope';
+import { notifyUsers, studentAudience } from '@/lib/notify';
 
 const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name,
                      tu.full_name AS teacher_name
@@ -108,6 +109,16 @@ export async function POST(request) {
                     Number(g.maxGrade ?? 100), clampStr(g.term, 30) || 'Term 1', clampStr(g.remarks, 300), year.id]);
         }
     });
+
+    // Notify each student, and their parents, once per request
+    const audience = await studentAudience(grades.map((g) => Number(g.studentId)));
+    for (const [studentId, { student, parents }] of audience) {
+        const mine = grades.filter((g) => Number(g.studentId) === studentId);
+        const body = mine.slice(0, 3).map((g) => `${clampStr(g.subject, 60)} : ${Number(g.grade)}/${Number(g.maxGrade ?? 100)}`).join(' · ');
+        const title = mine.length === 1 ? 'Nouvelle note' : `${mine.length} nouvelles notes`;
+        await notifyUsers(db, [student], { kind: 'grade', title, body, link: '/dashboard/student/grades' });
+        await notifyUsers(db, parents, { kind: 'grade', title, body, link: `/dashboard/parent/children/${studentId}` });
+    }
     return json({ success: true, count: grades.length });
 }
 

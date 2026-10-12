@@ -3,6 +3,7 @@ import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, isValidDate, clampStr, parseId } from '@/lib/api';
 import { currentSchoolYear } from '@/lib/school';
 import { visibleClassIds, attendanceAllowed, studentClassesById, childStudentIds } from '@/lib/scope';
+import { notifyUsers, studentAudience } from '@/lib/notify';
 
 const STATUSES = new Set(['present', 'absent', 'late', 'excused']);
 
@@ -91,5 +92,17 @@ export async function POST(request) {
                 [Number(r.studentId), r.date, r.status, teacherId, clampStr(r.notes, 200), year.id]);
         }
     });
+
+    // Absences and late arrivals go to the student and the parents
+    const audience = await studentAudience(records.filter((r) => r.status === 'absent' || r.status === 'late').map((r) => Number(r.studentId)));
+    for (const r of records) {
+        if (r.status !== 'absent' && r.status !== 'late') continue;
+        const info = audience.get(Number(r.studentId));
+        if (!info) continue;
+        const kind = r.status === 'absent' ? 'absence' : 'late';
+        const title = r.status === 'absent' ? 'Absence signalée' : 'Retard signalé';
+        await notifyUsers(db, [info.student], { kind, title, body: `Le ${r.date}`, link: '/dashboard/student/attendance' });
+        await notifyUsers(db, info.parents, { kind, title, body: `Le ${r.date}`, link: `/dashboard/parent/children/${Number(r.studentId)}` });
+    }
     return json({ success: true, count: records.length });
 }
