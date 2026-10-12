@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { hashPassword, generateTempPassword } from '@/lib/password';
 import { revokeUserSessions } from '@/lib/session';
 import { json, error, readJson, requirePermission, hasPerm, clampStr, isValidDate, parseId } from '@/lib/api';
+import { currentSchoolYear, resolveClassFor } from '@/lib/school';
 
 export async function GET(request, { params }) {
     const { session, response } = requirePermission(request);
@@ -33,16 +34,22 @@ export async function PUT(request, { params }) {
     const student = await db.get('SELECT * FROM students WHERE id = ?', [id]);
     if (!student) return error('Student not found', 404);
 
+    const year = await currentSchoolYear();
+    const cls = await resolveClassFor(body, year?.id ?? 0);
+    if (cls.error) return error(cls.error);
+
     await db.run('UPDATE users SET full_name = COALESCE(?, full_name), email = COALESCE(?, email), updated_at = now() WHERE id = ?',
         [clampStr(body.fullName, 100) || null, body.email !== undefined ? clampStr(body.email, 120) : null, student.user_id]);
     await db.run(`
         UPDATE students SET
           date_of_birth = COALESCE(?, date_of_birth), gender = COALESCE(?, gender), phone = COALESCE(?, phone),
-          address = COALESCE(?, address), class_name = COALESCE(?, class_name),
+          address = COALESCE(?, address),
           parent_name = COALESCE(?, parent_name), parent_phone = COALESCE(?, parent_phone)
         WHERE id = ?`,
         [body.dateOfBirth || null, body.gender ?? null, body.phone ?? null, body.address ?? null,
-            clampStr(body.className, 50) || null, body.parentName ?? null, body.parentPhone ?? null, id]);
+            body.parentName ?? null, body.parentPhone ?? null, id]);
+    // class_id is set explicitly so that a student can also be removed from a class (class_name follows by trigger)
+    if (cls.provided) await db.run('UPDATE students SET class_id = ? WHERE id = ?', [cls.classId, id]);
     return json({ success: true });
 }
 

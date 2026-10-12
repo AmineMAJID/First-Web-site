@@ -1,6 +1,7 @@
 // Grades API – GET, POST (bulk upsert), DELETE
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, clampStr, parseId } from '@/lib/api';
+import { currentSchoolYear, termsOf } from '@/lib/school';
 
 const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name,
                      tu.full_name AS teacher_name
@@ -19,8 +20,10 @@ export async function GET(request) {
     const subject = searchParams.get('subject');
     const className = searchParams.get('class');
 
-    const where = [];
-    const params = [];
+    const year = await currentSchoolYear();
+    if (!year) return json([]);
+    const where = ['g.school_year_id = ?'];
+    const params = [year.id];
 
     // Reading all grades needs grades.view_all (or grades.record); otherwise only the account's own grades
     if (!hasPerm(session, 'grades.record') && !hasPerm(session, 'grades.view_all')) {
@@ -57,6 +60,10 @@ export async function POST(request) {
         teacherId = (await db.get('SELECT id FROM teachers WHERE user_id = ?', [session.id]))?.id ?? null;
     }
 
+    const year = await currentSchoolYear();
+    if (!year) return error('No current school year');
+    const terms = new Set((await termsOf(year.id)).map((t) => t.name));
+
     // Validate everything first
     for (const g of grades) {
         const grade = Number(g.grade);
@@ -65,20 +72,21 @@ export async function POST(request) {
         if (!clampStr(g.subject, 60)) return error('Subject is required');
         if (!Number.isFinite(max) || max <= 0) return error('Invalid maxGrade');
         if (!Number.isFinite(grade) || grade < 0 || grade > max) return error(`Grade must be between 0 and ${max}`);
+        if (!terms.has(clampStr(g.term, 30) || 'Term 1')) return error(`Unknown term "${g.term}" for the current school year`);
     }
 
     await tx(async (t) => {
         for (const g of grades) {
             await t.run(`
-                INSERT INTO grades (student_id, teacher_id, subject, grade, max_grade, term, remarks)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (student_id, subject, term) DO UPDATE SET
+                INSERT INTO grades (student_id, teacher_id, subject, grade, max_grade, term, remarks, school_year_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (student_id, subject, term, school_year_id) DO UPDATE SET
                     grade = excluded.grade, max_grade = excluded.max_grade,
                     teacher_id = COALESCE(excluded.teacher_id, grades.teacher_id),
                     remarks = CASE WHEN excluded.remarks = '' THEN grades.remarks ELSE excluded.remarks END,
                     created_at = now()`,
                 [Number(g.studentId), teacherId ?? (parseId(g.teacherId) ?? null), clampStr(g.subject, 60), Number(g.grade),
-                    Number(g.maxGrade ?? 100), clampStr(g.term, 30) || 'Term 1', clampStr(g.remarks, 300)]);
+                    Number(g.maxGrade ?? 100), clampStr(g.term, 30) || 'Term 1', clampStr(g.remarks, 300), year.id]);
         }
     });
     return json({ success: true, count: grades.length });

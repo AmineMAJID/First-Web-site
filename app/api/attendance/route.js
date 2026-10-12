@@ -1,6 +1,7 @@
 // Attendance API – GET, POST (bulk upsert)
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, isValidDate, clampStr, parseId } from '@/lib/api';
+import { currentSchoolYear } from '@/lib/school';
 
 const STATUSES = new Set(['present', 'absent', 'late', 'excused']);
 
@@ -14,8 +15,10 @@ export async function GET(request) {
     const className = searchParams.get('class');
     const studentId = searchParams.get('studentId');
 
-    const where = [];
-    const params = [];
+    const year = await currentSchoolYear();
+    if (!year) return json([]);
+    const where = ['a.school_year_id = ?'];
+    const params = [year.id];
     // Reading all records needs attendance.view_all (or attendance.record); otherwise only the account's own
     if (!hasPerm(session, 'attendance.record') && !hasPerm(session, 'attendance.view_all')) {
         const student = await db.get('SELECT id FROM students WHERE user_id = ?', [session.id]);
@@ -50,10 +53,15 @@ export async function POST(request) {
     if (!records || records.length === 0) return error('records[] is required');
     if (records.length > 1000) return error('Too many records in one request (max 1000)');
 
+    const year = await currentSchoolYear();
+    if (!year) return error('No current school year');
     for (const r of records) {
         if (!parseId(r.studentId)) return error('Invalid studentId');
         if (!isValidDate(r.date)) return error('Invalid date');
         if (!STATUSES.has(r.status)) return error('Invalid status');
+        if (r.date < year.starts_on || r.date > year.ends_on) {
+            return error(`Date ${r.date} is outside the current school year (${year.label})`);
+        }
     }
 
     let teacherId = null;
@@ -64,10 +72,10 @@ export async function POST(request) {
     await tx(async (t) => {
         for (const r of records) {
             await t.run(`
-                INSERT INTO attendance (student_id, date, status, recorded_by, notes) VALUES (?, ?, ?, ?, ?)
+                INSERT INTO attendance (student_id, date, status, recorded_by, notes, school_year_id) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (student_id, date) DO UPDATE SET
                     status = excluded.status, recorded_by = excluded.recorded_by, notes = excluded.notes`,
-                [Number(r.studentId), r.date, r.status, teacherId, clampStr(r.notes, 200)]);
+                [Number(r.studentId), r.date, r.status, teacherId, clampStr(r.notes, 200), year.id]);
         }
     });
     return json({ success: true, count: records.length });

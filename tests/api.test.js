@@ -8,6 +8,8 @@ let admin;
 let teacher;   // { client, id, userId }
 let student;   // { client, id, username, className }
 const TERM = 'Term 1';
+// Attendance must fall inside the current school year: use today
+const DAY = new Date().toISOString().slice(0, 10);
 
 async function changePassword(client, currentPassword) {
     const next = 'Changed-Passw0rd-' + uniq('');
@@ -25,6 +27,8 @@ before(async () => {
     admin = (await adminLogin()).client;
 
     const className = 'Class ' + uniq('').slice(-4);
+    const cls = await admin.req('/api/classes', { method: 'POST', body: { name: className } });
+    assert.equal(cls.status, 201, JSON.stringify(cls.data));
     const s = await admin.req('/api/students', { method: 'POST', body: { fullName: 'Alice Test', className, email: 'alice@test.io' } });
     assert.equal(s.status, 201);
     const detail = s.data.student;
@@ -86,10 +90,10 @@ test('teacher: grade validation, upsert without duplicates, attendance', async (
     assert.equal(own.length, 1);
     assert.equal(typeof own[0].grade, 'number');
 
-    assert.equal((await teacher.client.req('/api/attendance', { method: 'POST', body: { records: [{ studentId: student.id, date: '2030-01-01', status: 'late' }] } })).status, 200);
-    assert.equal((await teacher.client.req('/api/attendance', { method: 'POST', body: { records: [{ studentId: student.id, date: '2030-01-01', status: 'sleeping' }] } })).status, 400);
+    assert.equal((await teacher.client.req('/api/attendance', { method: 'POST', body: { records: [{ studentId: student.id, date: DAY, status: 'late' }] } })).status, 200);
+    assert.equal((await teacher.client.req('/api/attendance', { method: 'POST', body: { records: [{ studentId: student.id, date: DAY, status: 'sleeping' }] } })).status, 400);
     // Scope to this student: other runs may have recorded the same date for other students
-    const day = (await teacher.client.req(`/api/attendance?date=2030-01-01&studentId=${student.id}`)).data;
+    const day = (await teacher.client.req(`/api/attendance?date=${DAY}&studentId=${student.id}`)).data;
     assert.equal(day.length, 1);
     assert.equal(day[0].status, 'late');
 });

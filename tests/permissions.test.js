@@ -47,6 +47,7 @@ before(async () => {
     assert.ok(ADMIN.username && ADMIN.password && ADMIN.totpSecret, 'set TEST_ADMIN_* variables');
     admin = (await adminLogin()).client;
     const className = 'Perm ' + uniq('').slice(-4);
+    assert.equal((await admin.req('/api/classes', { method: 'POST', body: { name: className } })).status, 201);
     const s = await admin.req('/api/students', { method: 'POST', body: { fullName: 'Perm Student', className, email: '' } });
     assert.equal(s.status, 201);
     const username = s.data.student.username;

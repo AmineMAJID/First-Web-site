@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, Edit3, Trash2, UserPlus, Download, KeyRound, Copy, Check, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useLanguage } from '@/lib/LanguageContext';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { api, downloadCsv, gradeColor } from '@/lib/client';
 
-const EMPTY = { fullName: '', email: '', dateOfBirth: '', gender: '', phone: '', address: '', className: 'Class A', parentName: '', parentPhone: '' };
+const EMPTY = { fullName: '', email: '', dateOfBirth: '', gender: '', phone: '', address: '', classId: '', parentName: '', parentPhone: '' };
 
 export default function AdminStudents() {
     const { t } = useLanguage();
@@ -17,6 +18,7 @@ export default function AdminStudents() {
     const router = useRouter();
     const [students, setStudents] = useState([]);
     const [classes, setClasses] = useState([]);
+    const [classList, setClassList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [classFilter, setClassFilter] = useState('');
@@ -24,7 +26,6 @@ export default function AdminStudents() {
     const [editStudent, setEditStudent] = useState(null);
     const [newCreds, setNewCreds] = useState(null);
     const [form, setForm] = useState(EMPTY);
-    const [customClass, setCustomClass] = useState(false);
     const [saving, setSaving] = useState(false);
     const [confirm, setConfirm] = useState(null); // { type: 'delete'|'reset', student }
     const [copied, setCopied] = useState(false);
@@ -32,20 +33,19 @@ export default function AdminStudents() {
     const fetchStudents = useCallback(() => {
         const params = new URLSearchParams();
         if (search) params.set('search', search);
-        if (classFilter) params.set('class', classFilter);
+        if (classFilter) params.set('classId', classFilter);
         api(`/api/students?${params}`).then(setStudents).catch((e) => toast.error(e.message)).finally(() => setLoading(false));
     }, [search, classFilter, toast]);
 
-    const fetchClasses = useCallback(() => api('/api/classes').then((d) => setClasses(d.classes)).catch(() => {}), []);
+    const fetchClasses = useCallback(() => api('/api/classes').then((d) => { setClasses(d.classes); setClassList(d.classList || []); }).catch(() => {}), []);
 
     useEffect(() => { const id = setTimeout(fetchStudents, search ? 250 : 0); return () => clearTimeout(id); }, [fetchStudents, search]);
     useEffect(() => { fetchClasses(); }, [fetchClasses]);
 
     const openAdd = () => {
         setEditStudent(null);
-        setForm({ ...EMPTY, className: classes[0]?.name || 'Class A' });
+        setForm({ ...EMPTY });
         setNewCreds(null);
-        setCustomClass(false);
         setShowModal(true);
     };
 
@@ -54,10 +54,9 @@ export default function AdminStudents() {
         setForm({
             fullName: s.full_name, email: s.email || '', dateOfBirth: s.date_of_birth || '',
             gender: s.gender || '', phone: s.phone || '', address: s.address || '',
-            className: s.class_name || 'Class A', parentName: s.parent_name || '', parentPhone: s.parent_phone || '',
+            classId: s.classId ? String(s.classId) : '', parentName: s.parent_name || '', parentPhone: s.parent_phone || '',
         });
         setNewCreds(null);
-        setCustomClass(false);
         setShowModal(true);
     };
 
@@ -66,11 +65,11 @@ export default function AdminStudents() {
         setSaving(true);
         try {
             if (editStudent) {
-                await api(`/api/students/${editStudent.id}`, { method: 'PUT', body: form });
+                await api(`/api/students/${editStudent.id}`, { method: 'PUT', body: { ...form, classId: form.classId || null } });
                 toast.success(t.common_extra.saved);
                 setShowModal(false);
             } else {
-                const data = await api('/api/students', { method: 'POST', body: form });
+                const data = await api('/api/students', { method: 'POST', body: { ...form, classId: form.classId || null } });
                 setNewCreds(data.student);
             }
             fetchStudents();
@@ -138,7 +137,7 @@ export default function AdminStudents() {
                 </div>
                 <select style={{ maxWidth: '200px' }} value={classFilter} onChange={e => setClassFilter(e.target.value)}>
                     <option value="">{t.students_page.allClasses}</option>
-                    {classes.map(c => <option key={c.name} value={c.name}>{c.name} ({c.students})</option>)}
+                    {classList.map(c => <option key={c.id} value={c.id}>{c.name} ({c.studentCount})</option>)}
                 </select>
             </div>
 
@@ -240,14 +239,12 @@ export default function AdminStudents() {
                                 </div>
                                 <div className="form-group">
                                     <label>{t.dashboard.class}</label>
-                                    {customClass ? (
-                                        <input autoFocus placeholder="Class C" value={form.className} onChange={e => setForm({ ...form, className: e.target.value })} />
-                                    ) : (
-                                        <select value={form.className} onChange={e => { if (e.target.value === '__new') { setCustomClass(true); setForm({ ...form, className: '' }); } else setForm({ ...form, className: e.target.value }); }}>
-                                            {!classes.some(c => c.name === form.className) && form.className && <option>{form.className}</option>}
-                                            {classes.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                            <option value="__new">+ {t.schedule_admin.newClass}</option>
-                                        </select>
+                                    <select value={form.classId} onChange={e => setForm({ ...form, classId: e.target.value })}>
+                                        <option value="">—</option>
+                                        {classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                    {classList.length === 0 && (
+                                        <small className="text-muted">Aucune classe pour l&apos;année en cours. <Link href="/dashboard/admin/classes">Créer des classes</Link></small>
                                     )}
                                 </div>
                             </div>
