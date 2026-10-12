@@ -8,7 +8,7 @@ export async function GET(request) {
 
     const user = await db.get(
         `SELECT u.id, u.username, u.role, u.full_name, u.email, u.avatar, u.must_change_password,
-                u.two_factor_secret IS NOT NULL AS has_2fa, r.label AS role_label
+                u.two_factor_secret IS NOT NULL AS has_2fa, r.label AS role_label, r.requires_2fa
            FROM users u JOIN roles r ON r.key = u.role WHERE u.id = ?`,
         [session.id],
     );
@@ -40,6 +40,7 @@ export async function GET(request) {
         avatar: user.avatar,
         mustChangePassword: !!user.must_change_password,
         has2fa: !!user.has_2fa,
+        requires2fa: !!user.requires_2fa,
         unreadMessages: unread.c,
     });
 }

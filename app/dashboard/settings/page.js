@@ -78,7 +78,7 @@ export default function SettingsPage() {
                             </div>
                         ))}
                     </div>
-                    {user?.role !== 'student' && (
+                    {user?.requires2fa && (
                         <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: user?.has2fa ? '#16a34a' : 'var(--text-muted)' }}>
                             {user?.has2fa ? <ShieldCheck size={18} /> : <ShieldOff size={18} />}
                             {user?.has2fa ? t.settings_page.twoFactorOn : t.settings_page.twoFactorOff}

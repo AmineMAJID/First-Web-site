@@ -59,7 +59,7 @@ export default function StudentDashboard() {
                 {[
                     { label: t.student_dashboard.averageGrade, value: avgGrade, icon: BookOpen, color: gradeColor(avgGrade), suffix: '/100', href: '/dashboard/student/grades' },
                     { label: t.student_dashboard.todaysClasses, value: todaySchedule.length, icon: Calendar, color: '#22c55e', suffix: '', href: '/dashboard/student/schedule' },
-                    { label: t.student_dashboard.unreadMessages, value: unreadMessages, icon: MessageSquare, color: '#f59e0b', suffix: '', href: '/dashboard/student/messages' },
+                    { label: t.student_dashboard.unreadMessages, value: unreadMessages, icon: MessageSquare, color: '#f59e0b', suffix: '', href: '/dashboard/messages' },
                     { label: t.student_dashboard.totalSubjects, value: [...new Set(grades.map(g => g.subject))].length, icon: GraduationCap, color: '#8b5cf6', suffix: '', href: '/dashboard/student/grades' },
                 ].map((c, i) => {
                     const Icon = c.icon;

@@ -129,7 +129,7 @@ export default function AdminDashboard() {
                         <Link href="/dashboard/admin/students" className="btn btn-primary"><UserPlus size={18} /> {t.dashboard.addStudent}</Link>
                         <Link href="/dashboard/admin/teachers" className="btn btn-outline" style={{ color: '#8b5cf6', borderColor: '#8b5cf6' }}><GraduationCap size={18} /> {t.dashboard.manageTeachers}</Link>
                         <Link href="/dashboard/admin/schedule" className="btn btn-outline" style={{ color: '#22c55e', borderColor: '#22c55e' }}><Calendar size={18} /> {t.common.schedule}</Link>
-                        <Link href="/dashboard/admin/messages" className="btn btn-outline" style={{ color: '#3b82f6', borderColor: '#3b82f6' }}><MessageSquare size={18} /> {t.dashboard.sendAnnouncement}</Link>
+                        <Link href="/dashboard/messages" className="btn btn-outline" style={{ color: '#3b82f6', borderColor: '#3b82f6' }}><MessageSquare size={18} /> {t.dashboard.sendAnnouncement}</Link>
                     </div>
                 </div>
             </div>
