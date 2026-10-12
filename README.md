@@ -6,8 +6,8 @@ Portail scolaire (administration, enseignants, élèves) construit avec **Next.j
 
 | Rôle | Fonctionnalités |
 |------|-----------------|
-| **Admin** | Tableau de bord & rapports (tendances de présence, répartition des notes, top / élèves à risque), gestion des élèves & enseignants (création avec mot de passe temporaire, réinitialisation mot de passe / 2FA, export CSV), **gestion des emplois du temps** (détection de conflits), messagerie (annonces, envoi par classe / destinataires multiples, accusés de lecture) |
-| **Enseignant** | Carnet de notes par matière / trimestre / classe avec remarques, saisie de présence par jour avec historique, emploi du temps personnel, messagerie vers élèves |
+| **Admin** | Tableau de bord & rapports (tendances de présence, répartition des notes, top / élèves à risque), gestion des élèves & enseignants (création avec mot de passe temporaire, réinitialisation mot de passe / 2FA, export CSV), **gestion du staff** (comptes de rôles personnalisés), **rôles et permissions**, messagerie (annonces, envoi par classe / destinataires multiples, accusés de lecture). L'administrateur n'a pas d'emploi du temps : la gestion des emplois du temps est une permission accordée à un rôle. |
+| **Enseignant** | Carnet de notes par matière / trimestre / classe avec remarques, saisie de présence par jour avec historique, emploi du temps personnel, messagerie vers élèves. Ces fonctionnalités sont des permissions : elles peuvent être retirées ou données à un autre rôle. |
 | **Élève** | Notes par trimestre avec évolution, calendrier de présence, emploi du temps, messagerie |
 | **Tous** | 3 langues (FR / EN / AR avec RTL), thème sombre, page Paramètres (changement de mot de passe), responsive mobile |
 
@@ -87,6 +87,18 @@ Ces commandes nécessitent un accès shell au serveur.
 
 Les élèves et enseignants sont créés depuis l'interface admin avec un **mot de passe temporaire** affiché une seule fois. Il doit être changé à la première connexion.
 
+## 🔑 Rôles et permissions
+
+Chaque fonctionnalité de l'application est une **permission** (catalogue dans `lib/permissions.js`). L'administrateur gère les rôles dans **Gestion du staff** (comptes du personnel) et **Rôles et permissions** (matrice : une case par fonctionnalité et par rôle).
+
+- Les rôles système **admin**, **enseignant** et **élève** existent toujours ; l'administrateur peut en créer d'autres (ex. « Surveillant »).
+- Les permissions sont vérifiées **à chaque requête**, côté pages comme côté API : un changement s'applique immédiatement, sans reconnexion.
+- Les permissions réservées à l'administrateur (gestion du staff, gestion des rôles) ne peuvent pas être données à un autre rôle. Le compte administrateur n'a pas d'emploi du temps.
+- Un rôle peut exiger la double authentification ou non (option du rôle).
+- Un rôle ne peut être supprimé que s'il n'est attribué à aucun compte.
+
+Exemple : retirer « Saisie des présences » au rôle Enseignant et l'accorder au rôle Surveillant : la section Présences disparaît pour les enseignants et apparaît pour les surveillants.
+
 ## 🧰 Scripts
 
 | Commande | Description |
@@ -133,7 +145,7 @@ Voir [`.env.example`](.env.example) :
 
 ```
 app/
-  api/            Routes API (auth, students, teachers, grades, attendance, messages, schedule, reports, classes)
+  api/            Routes API (auth, students, teachers, grades, attendance, messages, schedule, reports, classes, roles, staff)
   dashboard/      Pages par rôle (admin / teacher / student) + settings partagé
   login/          Connexion + 2FA
 components/       Toast, Modal, ConfirmDialog, Timetable, Messaging
@@ -147,7 +159,7 @@ lib/
   totp.js         TOTP RFC 6238 (anti-rejeu)
   crypto.js       Chiffrement AES-256-GCM des secrets
   security.js     Audit et limitation des tentatives
-  api.js          Helpers pour les routes (requireRole, validation…)
+  api.js          Helpers pour les routes (requirePermission, validation…)
   i18n/           Traductions fr / en / ar
 proxy.js          Authentification, contrôle d'accès par rôle, protection CSRF
 scripts/          migrate, create-admin, reset-2fa

@@ -1,11 +1,11 @@
 // Attendance API – GET, POST (bulk upsert)
 import { db, tx } from '@/lib/db';
-import { json, error, readJson, requireRole, isValidDate, clampStr, parseId } from '@/lib/api';
+import { json, error, readJson, requirePermission, hasPerm, isValidDate, clampStr, parseId } from '@/lib/api';
 
 const STATUSES = new Set(['present', 'absent', 'late', 'excused']);
 
 export async function GET(request) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request, 'attendance.record', 'attendance.view_all', 'attendance.view_own');
     if (response) return response;
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date');
@@ -16,7 +16,8 @@ export async function GET(request) {
 
     const where = [];
     const params = [];
-    if (session.role === 'student') {
+    // Reading all records needs attendance.view_all (or attendance.record); otherwise only the account's own
+    if (!hasPerm(session, 'attendance.record') && !hasPerm(session, 'attendance.view_all')) {
         const student = await db.get('SELECT id FROM students WHERE user_id = ?', [session.id]);
         if (!student) return json([]);
         where.push('a.student_id = ?');
@@ -41,7 +42,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const { session, response } = requireRole(request, 'teacher', 'admin');
+    const { session, response } = requirePermission(request, 'attendance.record');
     if (response) return response;
 
     const body = await readJson(request);

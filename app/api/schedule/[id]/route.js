@@ -1,10 +1,10 @@
 // Schedule [id] – PUT, DELETE (admin)
 import { db } from '@/lib/db';
-import { json, error, readJson, requireRole, parseId } from '@/lib/api';
+import { json, error, readJson, requirePermission, parseId } from '@/lib/api';
 import { validateSlot } from '@/lib/schedule';
 
 export async function PUT(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'schedule.manage');
     if (response) return response;
     const id = parseId((await params).id);
     const body = await readJson(request);
@@ -25,7 +25,7 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'schedule.manage');
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Slot not found', 404);

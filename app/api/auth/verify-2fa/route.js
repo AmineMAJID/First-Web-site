@@ -8,6 +8,7 @@ import { publicUser, cookieOptions, COOKIE_NAME, MFA_COOKIE, SESSION_HOURS } fro
 import { resolveSession, createSession, deleteSessionByToken } from '@/lib/session';
 import { recordEvent, mfaFailureCount, clientIp, userAgent } from '@/lib/security';
 import { json, error, readJson } from '@/lib/api';
+import { landingFor } from '@/lib/permissions';
 
 export async function POST(request) {
     try {
@@ -69,7 +70,7 @@ export async function POST(request) {
         await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
         await recordEvent('login_ok', { username: user.username, userId: user.id, ip, ua });
 
-        const response = json({ success: true, user: publicUser(user) });
+        const response = json({ success: true, user: publicUser(user), landing: landingFor(user.permissions) });
         response.cookies.set(COOKIE_NAME, token, cookieOptions(request, SESSION_HOURS * 3600));
         response.cookies.set(MFA_COOKIE, '', cookieOptions(request, 0));
         return response;

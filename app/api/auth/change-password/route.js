@@ -2,12 +2,12 @@
 // On success every other session of the account is revoked (the current one stays logged in).
 import { db } from '@/lib/db';
 import { hashPassword, verifyPassword, checkPasswordPolicy } from '@/lib/password';
-import { json, error, readJson, requireRole } from '@/lib/api';
+import { json, error, readJson, requireAuth } from '@/lib/api';
 import { revokeUserSessions } from '@/lib/session';
 import { recordEvent, clientIp, userAgent } from '@/lib/security';
 
 export async function POST(request) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requireAuth(request);
     if (response) return response;
 
     const body = await readJson(request);

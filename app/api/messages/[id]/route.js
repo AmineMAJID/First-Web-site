@@ -1,9 +1,9 @@
 // PUT /api/messages/[id] – mark as read ; DELETE – delete own/sent message
 import { db } from '@/lib/db';
-import { json, error, requireRole, parseId } from '@/lib/api';
+import { json, error, requirePermission, parseId } from '@/lib/api';
 
 export async function PUT(request, { params }) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request, 'messages.view');
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Message not found', 404);
@@ -21,7 +21,7 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request, 'messages.view');
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Message not found', 404);

@@ -58,7 +58,7 @@ test('student sees only own data and cannot reach admin resources', async () => 
 test('non-numeric ids are "not found", not server errors', async () => {
     assert.equal((await admin.req('/api/students/abc')).status, 404);
     assert.equal((await admin.req('/api/students/1;DROP TABLE users')).status, 404);
-    assert.equal((await admin.req('/api/schedule/xyz', { method: 'DELETE' })).status, 404);
+    assert.equal((await admin.req('/api/teachers/xyz', { method: 'DELETE' })).status, 404);
 });
 
 test('admin: student update and detail', async () => {
@@ -119,16 +119,10 @@ test('messaging: announcement, read receipts, direct message grouping, delete ri
     assert.equal((await admin.req(`/api/messages/${msg.id}`, { method: 'DELETE' })).status, 200);
 });
 
-test('schedule: create, conflict detection, update, delete', async () => {
-    const slot = { className: student.className, subject: 'Art', dayOfWeek: 'Friday', startTime: '14:00', endTime: '15:00', room: 'R1' };
-    const created = await admin.req('/api/schedule', { method: 'POST', body: slot });
-    assert.equal(created.status, 201);
-    assert.equal((await admin.req('/api/schedule', { method: 'POST', body: { ...slot, startTime: '14:30', endTime: '15:30' } })).status, 409);
-    assert.equal((await admin.req('/api/schedule', { method: 'POST', body: { ...slot, startTime: '16:00', endTime: '15:00' } })).status, 400);
-    assert.equal((await admin.req(`/api/schedule/${created.data.id}`, { method: 'PUT', body: { ...slot, room: 'R2' } })).status, 200);
-    assert.equal((await teacher.client.req('/api/schedule', { method: 'POST', body: slot })).status, 403);
-    assert.equal((await admin.req(`/api/schedule/${created.data.id}`, { method: 'DELETE' })).status, 200);
-    assert.equal((await admin.req(`/api/schedule/${created.data.id}`, { method: 'DELETE' })).status, 404);
+test('schedule: the administrator has no timetable; teachers cannot manage it', async () => {
+    // Timetable management is a permission granted to a role (see tests/permissions.test.js)
+    assert.equal((await admin.req('/api/schedule')).status, 403);
+    assert.equal((await teacher.client.req('/api/schedule', { method: 'POST', body: { className: student.className } })).status, 403);
 });
 
 test('reports and classes endpoints return numbers, not strings', async () => {

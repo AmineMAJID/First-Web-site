@@ -1,10 +1,10 @@
 // Teachers API – GET (list), POST (create)
 import { db, tx } from '@/lib/db';
 import { hashPassword, generateTempPassword } from '@/lib/password';
-import { json, error, readJson, requireRole, uniqueUsername, nextCode, clampStr } from '@/lib/api';
+import { json, error, readJson, requirePermission, uniqueUsername, nextCode, clampStr } from '@/lib/api';
 
 export async function GET(request) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'teachers.view');
     if (response) return response;
     const teachers = await db.all(`
         SELECT u.id AS "userId", u.username, u.full_name, u.email, u.created_at,
@@ -17,7 +17,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'teachers.manage');
     if (response) return response;
 
     const body = await readJson(request);

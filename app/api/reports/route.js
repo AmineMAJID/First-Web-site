@@ -1,12 +1,12 @@
 // GET /api/reports – admin analytics
 import { db } from '@/lib/db';
-import { json, requireRole } from '@/lib/api';
+import { json, requirePermission } from '@/lib/api';
 
 const LAST_30_DAYS = `to_char(CURRENT_DATE - 30, 'YYYY-MM-DD')`;
 const LAST_14_DAYS = `to_char(CURRENT_DATE - 14, 'YYYY-MM-DD')`;
 
 export async function GET(request) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'reports.view');
     if (response) return response;
 
     const totalStudents = (await db.get('SELECT COUNT(*) AS c FROM students')).c;

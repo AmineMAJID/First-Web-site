@@ -1,9 +1,9 @@
 // GET /api/classes – distinct classes + subjects (for dropdowns)
 import { db } from '@/lib/db';
-import { json, requireRole } from '@/lib/api';
+import { json, requireAuth } from '@/lib/api';
 
 export async function GET(request) {
-    const { response } = requireRole(request);
+    const { response } = requireAuth(request);
     if (response) return response;
     const classes = await db.all(`
         SELECT name, SUM(students) AS students FROM (

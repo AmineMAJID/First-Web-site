@@ -5,10 +5,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import {
     LayoutDashboard, Users, GraduationCap, BookOpen, Calendar, ClipboardCheck,
     MessageSquare, BarChart3, Settings, LogOut, Moon, Sun, Menu, X,
-    Shield, Languages, KeyRound
+    Shield, Languages, KeyRound, UserCog
 } from 'lucide-react';
 import { useLanguage } from '@/lib/LanguageContext';
 import { ToastProvider } from '@/components/Toast';
+import { FEATURES } from '@/lib/permissions';
+
+const FEATURE_ICONS = { LayoutDashboard, BarChart3, UserCog, Shield, Users, GraduationCap, BookOpen, ClipboardCheck, Calendar, MessageSquare, Settings };
 
 // Theme context for dark mode
 const ThemeContext = createContext();
@@ -30,35 +33,15 @@ export default function DashboardLayout({ children }) {
     const [loading, setLoading] = useState(true);
     const [showLangMenu, setShowLangMenu] = useState(false);
 
-    // Navigation configs
-    const navItems = {
-        admin: [
-            { label: t.common.dashboard, href: '/dashboard/admin', icon: LayoutDashboard },
-            { label: t.common.students, href: '/dashboard/admin/students', icon: Users },
-            { label: t.common.teachers, href: '/dashboard/admin/teachers', icon: GraduationCap },
-            { label: t.common.schedule, href: '/dashboard/admin/schedule', icon: Calendar },
-            { label: t.common.messages, href: '/dashboard/admin/messages', icon: MessageSquare, badge: true },
-            { label: t.common.reports, href: '/dashboard/admin/reports', icon: BarChart3 },
-        ],
-        teacher: [
-            { label: t.common.dashboard, href: '/dashboard/teacher', icon: LayoutDashboard },
-            { label: t.common.grades, href: '/dashboard/teacher/grades', icon: BookOpen },
-            { label: t.common.attendance, href: '/dashboard/teacher/attendance', icon: ClipboardCheck },
-            { label: t.common.schedule, href: '/dashboard/teacher/schedule', icon: Calendar },
-            { label: t.common.messages, href: '/dashboard/teacher/messages', icon: MessageSquare, badge: true },
-        ],
-        student: [
-            { label: t.common.dashboard, href: '/dashboard/student', icon: LayoutDashboard },
-            { label: t.common.schedule, href: '/dashboard/student/schedule', icon: Calendar },
-            { label: t.common.grades, href: '/dashboard/student/grades', icon: BookOpen },
-            { label: t.common.attendance, href: '/dashboard/student/attendance', icon: ClipboardCheck },
-            { label: t.common.messages, href: '/dashboard/student/messages', icon: MessageSquare, badge: true },
-        ],
-    };
+    // Navigation is built from the permissions of the account (see lib/permissions.js)
+    const perms = new Set(user?.permissions || []);
+    const currentNav = FEATURES
+        .filter((f) => f.nav && f.key !== 'account.settings' && perms.has(f.key))
+        .map((f) => ({ label: f.label[language] || f.label.fr, href: f.nav, icon: FEATURE_ICONS[f.icon], badge: !!f.badge }));
+    if (perms.has('account.settings')) currentNav.push({ label: t.common_extra.settings, href: '/dashboard/settings', icon: Settings });
 
     // The role comes from the authenticated user, not from the URL
-    const role = user?.role || pathname.split('/')[2] || 'admin';
-    const currentNav = [...(navItems[role] || navItems.admin), { label: t.common_extra.settings, href: '/dashboard/settings', icon: Settings }];
+    const role = user?.role || 'admin';
 
     const refreshUser = () => fetch('/api/auth/me')
         .then(r => { if (!r.ok) throw new Error('Unauthorized'); return r.json(); })
@@ -110,8 +93,8 @@ export default function DashboardLayout({ children }) {
         );
     }
 
-    const roleColor = role === 'admin' ? '#ef4444' : role === 'teacher' ? '#3b82f6' : '#22c55e';
-    const roleLabel = role === 'admin' ? t.common.adminPanel : role === 'teacher' ? t.common.teacherPanel : t.common.studentPanel;
+    const roleColor = role === 'admin' ? '#ef4444' : role === 'teacher' ? '#3b82f6' : role === 'student' ? '#22c55e' : '#8b5cf6';
+    const roleLabel = role === 'admin' ? t.common.adminPanel : role === 'teacher' ? t.common.teacherPanel : role === 'student' ? t.common.studentPanel : (user?.roleLabel || role);
 
     const expanded = sidebarOpen || mobileSidebar;
     const sidebarStyle = {

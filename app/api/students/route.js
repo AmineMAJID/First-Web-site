@@ -1,10 +1,10 @@
 // Students API – GET (list), POST (create)
 import { db, tx } from '@/lib/db';
 import { hashPassword, generateTempPassword } from '@/lib/password';
-import { json, error, readJson, requireRole, uniqueUsername, nextCode, clampStr, isValidDate } from '@/lib/api';
+import { json, error, readJson, requirePermission, uniqueUsername, nextCode, clampStr, isValidDate } from '@/lib/api';
 
 export async function GET(request) {
-    const { response } = requireRole(request, 'admin', 'teacher');
+    const { response } = requirePermission(request, 'students.view');
     if (response) return response;
 
     const { searchParams } = new URL(request.url);
@@ -35,7 +35,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'students.manage');
     if (response) return response;
 
     const body = await readJson(request);

@@ -10,7 +10,7 @@
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.js",
     "admin:create": "node --env-file-if-exists=.env.local scripts/create-admin.js",
     "admin:reset-2fa": "node --env-file-if-exists=.env.local scripts/reset-2fa.js",
-    "test": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/auth.test.js tests/api.test.js",
+    "test": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/auth.test.js tests/api.test.js tests/permissions.test.js",
     "codes:generate": "node --env-file-if-exists=.env.local scripts/generate-codes.js",
     "admin:reset-password": "node --env-file-if-exists=.env.local scripts/reset-password.js"
   },

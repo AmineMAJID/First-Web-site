@@ -1,15 +1,15 @@
 // GET /api/auth/me – current user + profile info
 import { db } from '@/lib/db';
-import { json, error, requireRole } from '@/lib/api';
+import { json, error, requireAuth } from '@/lib/api';
 
 export async function GET(request) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requireAuth(request);
     if (response) return response;
 
     const user = await db.get(
-        `SELECT id, username, role, full_name, email, avatar, must_change_password,
-                two_factor_secret IS NOT NULL AS has_2fa
-           FROM users WHERE id = ?`,
+        `SELECT u.id, u.username, u.role, u.full_name, u.email, u.avatar, u.must_change_password,
+                u.two_factor_secret IS NOT NULL AS has_2fa, r.label AS role_label
+           FROM users u JOIN roles r ON r.key = u.role WHERE u.id = ?`,
         [session.id],
     );
     if (!user) return error('User not found', 404);
@@ -32,6 +32,8 @@ export async function GET(request) {
         profileId: profileId ?? null,
         username: user.username,
         role: user.role,
+        roleLabel: user.role_label,
+        permissions: [...session.permissions],
         full_name: user.full_name,
         fullName: user.full_name,
         email: user.email,

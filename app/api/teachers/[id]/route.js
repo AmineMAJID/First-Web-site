@@ -3,10 +3,10 @@ import { db } from '@/lib/db';
 import { hashPassword, generateTempPassword } from '@/lib/password';
 import { revokeUserSessions } from '@/lib/session';
 import { recordEvent, clientIp, userAgent } from '@/lib/security';
-import { json, error, readJson, requireRole, clampStr, parseId } from '@/lib/api';
+import { json, error, readJson, requirePermission, clampStr, parseId } from '@/lib/api';
 
 export async function PUT(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'teachers.manage');
     if (response) return response;
     const id = parseId((await params).id);
     const body = await readJson(request);
@@ -24,7 +24,7 @@ export async function PUT(request, { params }) {
 }
 
 export async function POST(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'teachers.manage');
     if (response) return response;
     const id = parseId((await params).id);
     const body = await readJson(request);
@@ -51,7 +51,7 @@ export async function POST(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'teachers.manage');
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Teacher not found', 404);

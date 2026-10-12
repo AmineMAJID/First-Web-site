@@ -1,9 +1,9 @@
 // Messages API – GET (inbox + sent), POST (send)
 import { db, tx } from '@/lib/db';
-import { json, error, readJson, requireRole, clampStr } from '@/lib/api';
+import { json, error, readJson, requirePermission, clampStr } from '@/lib/api';
 
 export async function GET(request) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request, 'messages.view');
     if (response) return response;
     const box = new URL(request.url).searchParams.get('box') || 'all'; // inbox | sent | all
 
@@ -46,7 +46,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const { session, response } = requireRole(request, 'admin', 'teacher');
+    const { session, response } = requirePermission(request, 'messages.send');
     if (response) return response;
 
     const body = await readJson(request);
@@ -58,8 +58,8 @@ export async function POST(request) {
 
     if (isAnnouncement) {
         if (!['student', 'teacher'].includes(recipientRole)) return error('Invalid recipient role');
-        // Teachers may only broadcast to students
-        if (session.role === 'teacher' && recipientRole !== 'student') return error('Forbidden', 403);
+        // Only the administrator may address teachers; everyone else may only write to students
+        if (session.role !== 'admin' && recipientRole !== 'student') return error('Forbidden', 403);
         await db.run(`INSERT INTO messages (sender_id, recipient_role, subject, body, is_announcement) VALUES (?, ?, ?, ?, TRUE)`,
             [session.id, recipientRole, subject, messageBody]);
         return json({ success: true, count: 1 }, 201);
@@ -78,11 +78,12 @@ export async function POST(request) {
     targets.delete(session.id);
     if (targets.size === 0) return error('No recipients selected');
 
-    // Make sure all targets exist (and teachers can only message students/admin)
+    // Make sure all targets exist. Non-admin senders may only write to students and administrators.
     const ids = [...targets];
     const placeholders = ids.map(() => '?').join(',');
     const users = await db.all(`SELECT id, role FROM users WHERE id IN (${placeholders})`, ids);
     if (users.length !== ids.length) return error('Unknown recipient');
+    if (session.role !== 'admin' && users.some((u) => !['student', 'admin'].includes(u.role))) return error('Forbidden', 403);
 
     await tx(async (t) => {
         for (const id of ids) {

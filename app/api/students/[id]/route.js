@@ -2,10 +2,10 @@
 import { db } from '@/lib/db';
 import { hashPassword, generateTempPassword } from '@/lib/password';
 import { revokeUserSessions } from '@/lib/session';
-import { json, error, readJson, requireRole, clampStr, isValidDate, parseId } from '@/lib/api';
+import { json, error, readJson, requirePermission, hasPerm, clampStr, isValidDate, parseId } from '@/lib/api';
 
 export async function GET(request, { params }) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request);
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Student not found', 404);
@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
         SELECT u.id AS "userId", u.username, u.full_name, u.email, s.*
         FROM users u JOIN students s ON u.id = s.user_id WHERE s.id = ?`, [id]);
     if (!student) return error('Student not found', 404);
-    if (session.role === 'student' && student.userId !== session.id) return error('Forbidden', 403);
+    if (student.userId !== session.id && !hasPerm(session, 'students.view')) return error('Forbidden', 403);
 
     const grades = await db.all('SELECT * FROM grades WHERE student_id = ? ORDER BY term, subject', [id]);
     const attendance = await db.all('SELECT status, COUNT(*) AS count FROM attendance WHERE student_id = ? GROUP BY status', [id]);
@@ -22,7 +22,7 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'students.manage');
     if (response) return response;
     const id = parseId((await params).id);
     const body = await readJson(request);
@@ -48,7 +48,7 @@ export async function PUT(request, { params }) {
 
 // POST /api/students/[id]  { action: 'reset-password' }
 export async function POST(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'students.manage');
     if (response) return response;
     const id = parseId((await params).id);
     const body = await readJson(request);
@@ -65,7 +65,7 @@ export async function POST(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'students.manage');
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Student not found', 404);

@@ -1,6 +1,6 @@
 // Schedule API – GET (role aware), POST (admin create)
 import { db } from '@/lib/db';
-import { json, error, readJson, requireRole, parseId } from '@/lib/api';
+import { json, error, readJson, requirePermission, parseId } from '@/lib/api';
 import { DAYS, validateSlot } from '@/lib/schedule';
 
 const ORDER = `CASE sc.day_of_week ${DAYS.map((d, i) => `WHEN '${d}' THEN ${i + 1}`).join(' ')} END, sc.start_time`;
@@ -9,7 +9,7 @@ const BASE = `SELECT sc.*, u.full_name AS teacher_name FROM schedules sc
               LEFT JOIN users u ON t.user_id = u.id`;
 
 export async function GET(request) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request, 'schedule.view');
     if (response) return response;
     const className = new URL(request.url).searchParams.get('class');
 
@@ -28,7 +28,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const { response } = requireRole(request, 'admin');
+    const { response } = requirePermission(request, 'schedule.manage');
     if (response) return response;
     const body = await readJson(request);
     const { error: msg, value } = validateSlot(body);

@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { COOKIE_NAME, MFA_COOKIE, cookieOptions } from './lib/auth.js';
 import { resolveSession } from './lib/session.js';
+import { landingFor, featureForPath } from './lib/permissions.js';
 
 const PUBLIC_PATHS = new Set([
     '/login',
@@ -13,7 +14,7 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const IDENTITY_HEADERS = ['x-user-id', 'x-user-role', 'x-user-name', 'x-session-id'];
+const IDENTITY_HEADERS = ['x-user-id', 'x-user-role', 'x-user-name', 'x-session-id', 'x-user-perms'];
 
 export async function proxy(request) {
     const { pathname } = request.nextUrl;
@@ -42,7 +43,7 @@ export async function proxy(request) {
     // Public routes – but bounce already-authenticated users away from /login
     if (PUBLIC_PATHS.has(pathname)) {
         if (pathname === '/login' && user) {
-            return NextResponse.redirect(new URL(`/dashboard/${user.role}`, request.url));
+            return NextResponse.redirect(new URL(landingFor(user.permissions), request.url));
         }
         return NextResponse.next({ request: { headers: requestHeaders } });
     }
@@ -60,21 +61,23 @@ export async function proxy(request) {
         return response;
     }
 
+    const landing = new URL(landingFor(user.permissions), request.url);
     if (pathname === '/' || pathname === '/dashboard') {
-        return NextResponse.redirect(new URL(`/dashboard/${user.role}`, request.url));
+        return NextResponse.redirect(landing);
     }
 
-    // Role guard for /dashboard/<role>/...  (shared pages like /dashboard/settings are allowed)
-    if (pathname.startsWith('/dashboard/')) {
-        const section = pathname.split('/')[2];
-        const roles = ['admin', 'teacher', 'student'];
-        if (roles.includes(section) && section !== user.role) {
-            return NextResponse.redirect(new URL(`/dashboard/${user.role}`, request.url));
+    // Page guard: each page belongs to one feature, and the user must hold that feature's permission.
+    // Pages not listed in the catalog are refused. Dashboard API routes check permissions themselves.
+    if (pathname.startsWith('/dashboard/') && !isApi) {
+        const feature = featureForPath(pathname);
+        if (!feature || !user.permissions.includes(feature)) {
+            return NextResponse.redirect(landing);
         }
     }
 
     requestHeaders.set('x-user-id', String(user.id));
     requestHeaders.set('x-user-role', user.role);
+    requestHeaders.set('x-user-perms', user.permissions.join(','));
     requestHeaders.set('x-user-name', encodeURIComponent(user.full_name || ''));
     requestHeaders.set('x-session-id', String(resolved.sessionId));
     return NextResponse.next({ request: { headers: requestHeaders } });

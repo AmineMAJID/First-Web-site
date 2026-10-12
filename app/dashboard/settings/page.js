@@ -38,7 +38,7 @@ export default function SettingsPage() {
     const info = [
         [t.login.username, user?.username],
         ['Email', user?.email || '—'],
-        [user?.role === 'student' ? 'ID' : user?.role === 'teacher' ? 'ID' : null, user?.student_id || user?.teacher_id],
+    
         [user?.role === 'student' ? t.dashboard.class : user?.role === 'teacher' ? t.dashboard.subject : null, user?.class_name || user?.subject],
     ].filter(([k, v]) => k && v);
 

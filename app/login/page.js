@@ -35,9 +35,10 @@ function LoginForm() {
         document.documentElement.setAttribute('data-theme', localStorage.getItem('portal-theme') || 'light');
     }, []);
 
-    const goToDashboard = (role) => {
+    // landing = first page the account may open (computed by the server from its permissions)
+    const goToDashboard = (landing) => {
         const next = searchParams.get('next');
-        const safeNext = next && next.startsWith('/dashboard') ? next : `/dashboard/${role}`;
+        const safeNext = next && next.startsWith('/dashboard/') ? next : (landing || '/dashboard');
         router.push(safeNext);
         router.refresh();
     };
@@ -73,7 +74,7 @@ function LoginForm() {
                 setStep('2fa-verify');
                 setLoading(false);
             } else {
-                goToDashboard(data.user.role);
+                goToDashboard(data.landing);
             }
         } catch {
             setError(t.login_extra.networkError);
@@ -98,7 +99,7 @@ function LoginForm() {
                 if (res.status === 401 && /expired/i.test(data.error || '')) backToLogin();
                 return;
             }
-            goToDashboard(data.user.role);
+            goToDashboard(data.landing);
         } catch {
             setError(t.login_extra.networkError);
             setLoading(false);

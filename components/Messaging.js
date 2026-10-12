@@ -14,12 +14,12 @@ function formatDate(s, lang) {
     return d.toLocaleString(lang === 'ar' ? 'ar' : lang === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-// role: 'admin' | 'teacher' | 'student'
+// role: the account's role key (admin-only recipient options depend on it)
 export default function Messaging({ role }) {
     const { t, language } = useLanguage();
     const toast = useToast();
-    const { refreshUser } = useUser();
-    const canSend = role !== 'student';
+    const { user, refreshUser } = useUser();
+    const canSend = (user?.permissions || []).includes('messages.send');
 
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);

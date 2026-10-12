@@ -1,6 +1,6 @@
 // Grades API – GET, POST (bulk upsert), DELETE
 import { db, tx } from '@/lib/db';
-import { json, error, readJson, requireRole, clampStr, parseId } from '@/lib/api';
+import { json, error, readJson, requirePermission, hasPerm, clampStr, parseId } from '@/lib/api';
 
 const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name,
                      tu.full_name AS teacher_name
@@ -11,7 +11,7 @@ const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_c
               LEFT JOIN users tu ON t.user_id = tu.id`;
 
 export async function GET(request) {
-    const { session, response } = requireRole(request);
+    const { session, response } = requirePermission(request, 'grades.record', 'grades.view_all', 'grades.view_own');
     if (response) return response;
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('studentId');
@@ -22,7 +22,8 @@ export async function GET(request) {
     const where = [];
     const params = [];
 
-    if (session.role === 'student') {
+    // Reading all grades needs grades.view_all (or grades.record); otherwise only the account's own grades
+    if (!hasPerm(session, 'grades.record') && !hasPerm(session, 'grades.view_all')) {
         const student = await db.get('SELECT id FROM students WHERE user_id = ?', [session.id]);
         if (!student) return json([]);
         where.push('g.student_id = ?');
@@ -43,7 +44,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-    const { session, response } = requireRole(request, 'teacher', 'admin');
+    const { session, response } = requirePermission(request, 'grades.record');
     if (response) return response;
 
     const body = await readJson(request);
@@ -85,7 +86,7 @@ export async function POST(request) {
 
 // DELETE /api/grades?id=123
 export async function DELETE(request) {
-    const { session, response } = requireRole(request, 'teacher', 'admin');
+    const { session, response } = requirePermission(request, 'grades.record');
     if (response) return response;
     const id = parseId(new URL(request.url).searchParams.get('id'));
     if (!id) return error('id is required');
