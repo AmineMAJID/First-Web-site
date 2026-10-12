@@ -1,0 +1,17 @@
+# Local PostgreSQL for development:  docker compose up -d
+# Then copy .env.example to .env.local (DATABASE_URL already matches this file).
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: portal-dev-pass   # development only, change it for anything exposed
+      POSTGRES_DB: student_portal
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - portal-pgdata:/var/lib/postgresql/data
+
+volumes:
+  portal-pgdata:

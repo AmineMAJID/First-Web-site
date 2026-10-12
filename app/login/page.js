@@ -27,30 +27,13 @@ function LoginForm() {
 
     // 2FA States
     const [step, setStep] = useState('login'); // 'login', '2fa-setup', '2fa-verify'
-    const [tempToken, setTempToken] = useState('');
     const [qrCode, setQrCode] = useState('');
     const [setupSecret, setSetupSecret] = useState('');
     const [twoFactorCode, setTwoFactorCode] = useState('');
 
-    const roles = [
-        { key: 'admin', label: 'Admin', icon: Shield, color: '#ef4444', demo: { user: 'admin', pass: 'admin123' } },
-        { key: 'teacher', label: t.common.teachers, icon: BookOpen, color: '#3b82f6', demo: { user: 'teacher1', pass: 'teacher123' } },
-        { key: 'student', label: t.common.students, icon: User, color: '#22c55e', demo: { user: 'alice', pass: 'student123' } },
-    ];
-
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', localStorage.getItem('portal-theme') || 'light');
     }, []);
-
-    const fillDemo = (role) => {
-        const r = roles.find(r => r.key === role);
-        if (r) {
-            setUsername(r.demo.user);
-            setPassword(r.demo.pass);
-            setSelectedRole(role);
-            setError('');
-        }
-    };
 
     const goToDashboard = (role) => {
         const next = searchParams.get('next');
@@ -76,8 +59,7 @@ function LoginForm() {
                 return;
             }
             if (data.requires2FASetup) {
-                setTempToken(data.tempToken);
-                const qrRes = await fetch(`/api/auth/setup-2fa?tempToken=${encodeURIComponent(data.tempToken)}`);
+                const qrRes = await fetch('/api/auth/setup-2fa');
                 const qrData = await qrRes.json();
                 if (qrData.success) {
                     setQrCode(qrData.qrCodeUrl);
@@ -88,7 +70,6 @@ function LoginForm() {
                 }
                 setLoading(false);
             } else if (data.requires2FA) {
-                setTempToken(data.tempToken);
                 setStep('2fa-verify');
                 setLoading(false);
             } else {
@@ -108,17 +89,13 @@ function LoginForm() {
             const res = await fetch('/api/auth/verify-2fa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tempToken,
-                    code: twoFactorCode,
-                    setupSecret: step === '2fa-setup' ? setupSecret : undefined,
-                }),
+                body: JSON.stringify({ code: twoFactorCode }),
             });
             const data = await res.json();
             if (!res.ok) {
                 setError(data.error || t.common_extra.errorGeneric);
                 setLoading(false);
-                if (res.status === 401 && /temporary/i.test(data.error || '')) backToLogin();
+                if (res.status === 401 && /expired/i.test(data.error || '')) backToLogin();
                 return;
             }
             goToDashboard(data.user.role);
@@ -131,7 +108,6 @@ function LoginForm() {
     const backToLogin = () => {
         setStep('login');
         setTwoFactorCode('');
-        setTempToken('');
         setQrCode('');
         setSetupSecret('');
         setError('');
@@ -219,32 +195,6 @@ function LoginForm() {
 
                 {step === 'login' && (
                     <>
-                        <div style={styles.roleTabs}>
-                            {roles.map(role => {
-                                const Icon = role.icon;
-                                const isActive = selectedRole === role.key;
-                                return (
-                                    <button
-                                        key={role.key}
-                                        type="button"
-                                        onClick={() => fillDemo(role.key)}
-                                        style={{
-                                            ...styles.roleTab,
-                                            ...(isActive ? {
-                                                background: `linear-gradient(135deg, ${role.color}22, ${role.color}11)`,
-                                                borderColor: role.color,
-                                                color: role.color,
-                                            } : {}),
-                                        }}
-                                    >
-                                        <Icon size={16} />
-                                        <span>{role.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <p style={styles.demoHint}>{t.login_extra.demoHint}</p>
-
                         <form onSubmit={handleSubmit} style={styles.form}>
                             {error && <div style={styles.errorBox} role="alert"><span>⚠️</span> {error}</div>}
 

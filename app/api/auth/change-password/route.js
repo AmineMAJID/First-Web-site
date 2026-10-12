@@ -1,23 +1,33 @@
-// POST /api/auth/change-password
-import { getDb } from '@/lib/db';
-import { hashPassword, comparePassword } from '@/lib/auth';
+// POST /api/auth/change-password  { currentPassword, newPassword }
+// On success every other session of the account is revoked (the current one stays logged in).
+import { db } from '@/lib/db';
+import { hashPassword, verifyPassword, checkPasswordPolicy } from '@/lib/password';
 import { json, error, readJson, requireRole } from '@/lib/api';
+import { revokeUserSessions } from '@/lib/session';
+import { recordEvent, clientIp, userAgent } from '@/lib/security';
 
 export async function POST(request) {
     const { session, response } = requireRole(request);
     if (response) return response;
 
     const body = await readJson(request);
-    const currentPassword = String(body?.currentPassword || '');
-    const newPassword = String(body?.newPassword || '');
+    const currentPassword = typeof body?.currentPassword === 'string' ? body.currentPassword : '';
+    const newPassword = typeof body?.newPassword === 'string' ? body.newPassword : '';
     if (!currentPassword || !newPassword) return error('Both passwords are required');
-    if (newPassword.length < 8) return error('New password must be at least 8 characters');
 
-    const db = getDb();
-    const user = db.prepare('SELECT id, password FROM users WHERE id = ?').get(session.id);
-    if (!user || !comparePassword(currentPassword, user.password)) return error('Current password is incorrect', 401);
+    const user = await db.get('SELECT id, username, password_hash FROM users WHERE id = ?', [session.id]);
+    if (!user) return error('User not found', 404);
+    if (!(await verifyPassword(user.password_hash, currentPassword))) return error('Current password is incorrect', 401);
 
-    db.prepare('UPDATE users SET password = ?, must_change_password = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(hashPassword(newPassword), session.id);
+    const policyError = checkPasswordPolicy(newPassword, user.username);
+    if (policyError) return error(policyError);
+    if (await verifyPassword(user.password_hash, newPassword)) return error('New password must be different from the current one');
+
+    await db.run(
+        'UPDATE users SET password_hash = ?, must_change_password = FALSE, password_changed_at = now(), updated_at = now() WHERE id = ?',
+        [await hashPassword(newPassword), session.id],
+    );
+    await revokeUserSessions(session.id, session.sessionId);
+    await recordEvent('password_changed', { username: user.username, userId: user.id, ip: clientIp(request), ua: userAgent(request) });
     return json({ success: true });
 }

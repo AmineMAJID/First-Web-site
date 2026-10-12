@@ -177,7 +177,7 @@ export default function Messaging({ role }) {
                                 {(role === 'admin' || selected.is_sent || !selected.is_announcement) && <button className="btn btn-outline btn-sm" style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={() => setToDelete(selected)} title={t.messages_extra.delete}><Trash2 size={14} /></button>}
                             </div>
                         </div>
-                        {selected.is_announcement === 1 && <span className="badge badge-warning" style={{ marginBottom: 12 }}>{t.messages_extra.announcement}</span>}
+                        {selected.is_announcement && <span className="badge badge-warning" style={{ marginBottom: 12 }}>{t.messages_extra.announcement}</span>}
                         <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, color: 'var(--text-secondary)' }}>{selected.body}</p>
                     </div>
                 )}

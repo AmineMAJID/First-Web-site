@@ -1,57 +1,57 @@
-// POST /api/auth/login
-import { getDb, ensureSeeded } from '@/lib/db';
-import { comparePassword, signToken, sessionPayload, publicUser, cookieOptions, COOKIE_NAME } from '@/lib/auth';
+// POST /api/auth/login  { username, password }
+// - students: session cookie is set immediately
+// - admins / teachers: a 5-minute "mfa" session cookie is set, then POST /api/auth/verify-2fa
+import { db } from '@/lib/db';
+import { verifyPassword, burnPasswordTime } from '@/lib/password';
+import { publicUser, cookieOptions, COOKIE_NAME, MFA_COOKIE, SESSION_HOURS, MFA_MINUTES } from '@/lib/auth';
+import { createSession } from '@/lib/session';
+import { recordEvent, isLoginBlocked, clientIp, userAgent } from '@/lib/security';
 import { json, error, readJson } from '@/lib/api';
-
-// Very small in-memory rate limiter (per username+ip): 10 attempts / 15 min
-const attempts = new Map();
-const WINDOW = 15 * 60 * 1000;
-const MAX = 10;
-function tooManyAttempts(key) {
-    const now = Date.now();
-    const entry = attempts.get(key) || [];
-    const recent = entry.filter((t) => now - t < WINDOW);
-    attempts.set(key, recent);
-    return recent.length >= MAX;
-}
-function recordAttempt(key) {
-    attempts.set(key, [...(attempts.get(key) || []), Date.now()]);
-}
 
 export async function POST(request) {
     try {
-        await ensureSeeded();
         const body = await readJson(request);
-        const username = String(body?.username || '').trim().toLowerCase();
-        const password = String(body?.password || '');
+        const username = String(body?.username || '').trim().toLowerCase().slice(0, 64);
+        const password = typeof body?.password === 'string' ? body.password.slice(0, 256) : '';
         if (!username || !password) return error('Username and password required');
 
-        const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'local';
-        const key = `${username}@${ip}`;
-        if (tooManyAttempts(key)) return error('Too many attempts. Try again later.', 429);
+        const ip = clientIp(request);
+        const ua = userAgent(request);
 
-        const db = getDb();
-        const user = db.prepare('SELECT * FROM users WHERE lower(username) = ?').get(username);
-        if (!user || !comparePassword(password, user.password)) {
-            recordAttempt(key);
+        if (await isLoginBlocked(username, ip)) {
+            await recordEvent('login_locked', { username, ip, ua });
+            return error('Too many failed attempts. Please try again in 15 minutes.', 429);
+        }
+
+        const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+        // Always run one argon2 verification, so response time does not reveal whether the user exists
+        let valid = false;
+        if (user) valid = await verifyPassword(user.password_hash, password);
+        else await burnPasswordTime(password);
+
+        if (!user || !valid) {
+            await recordEvent('login_failed', { username, userId: user?.id ?? null, ip, ua });
+            // Same message for unknown user and wrong password
             return error('Invalid credentials', 401);
         }
-        attempts.delete(key);
 
-        // Admins and teachers must complete 2FA before receiving a session
         if (user.role === 'admin' || user.role === 'teacher') {
-            const tempToken = await signToken({ ...sessionPayload(user), temp: true }, '10m');
-            return json({
+            const token = await createSession({ userId: user.id, kind: 'mfa', ip, ua });
+            const response = json({
                 success: true,
                 requires2FA: !!user.two_factor_secret,
                 requires2FASetup: !user.two_factor_secret,
-                tempToken,
             });
+            response.cookies.set(MFA_COOKIE, token, cookieOptions(request, MFA_MINUTES * 60));
+            await recordEvent('password_ok', { username, userId: user.id, ip, ua });
+            return response;
         }
 
-        const token = await signToken(sessionPayload(user));
+        const token = await createSession({ userId: user.id, kind: 'full', ip, ua });
+        await db.run('UPDATE users SET last_login_at = now() WHERE id = ?', [user.id]);
+        await recordEvent('login_ok', { username, userId: user.id, ip, ua });
         const response = json({ success: true, user: publicUser(user) });
-        response.cookies.set(COOKIE_NAME, token, cookieOptions(request));
+        response.cookies.set(COOKIE_NAME, token, cookieOptions(request, SESSION_HOURS * 3600));
         return response;
     } catch (e) {
         console.error('Login error:', e);

@@ -46,3 +46,6 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 portal_debug.log
+
+# keep the environment template versioned
+!.env.example

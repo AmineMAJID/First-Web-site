@@ -1,7 +1,11 @@
-import { getDb } from '@/lib/db';
-import { json } from '@/lib/api';
+import { db } from '@/lib/db';
+import { json, error } from '@/lib/api';
 
 export async function GET() {
-    const ok = getDb().prepare('SELECT 1 AS ok').get().ok === 1;
-    return json({ status: ok ? 'ok' : 'error', time: new Date().toISOString() });
+    try {
+        const row = await db.get('SELECT 1 AS ok');
+        return json({ status: row?.ok === 1 ? 'ok' : 'error', time: new Date().toISOString() });
+    } catch {
+        return error('Database unavailable', 503);
+    }
 }

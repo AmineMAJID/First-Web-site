@@ -1,10 +1,7 @@
-// Next.js 16 proxy (formerly middleware.js): route protection + role-based access.
+// Next.js 16 proxy (formerly middleware.js): authentication, role-based access, CSRF check.
 import { NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'student-portal-dev-secret-change-me'
-);
+import { COOKIE_NAME, MFA_COOKIE, cookieOptions } from './lib/auth.js';
+import { resolveSession } from './lib/session.js';
 
 const PUBLIC_PATHS = new Set([
     '/login',
@@ -15,57 +12,71 @@ const PUBLIC_PATHS = new Set([
     '/api/health',
 ]);
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const IDENTITY_HEADERS = ['x-user-id', 'x-user-role', 'x-user-name', 'x-session-id'];
+
 export async function proxy(request) {
     const { pathname } = request.nextUrl;
-    const token = request.cookies.get('auth-token')?.value;
+    const isApi = pathname.startsWith('/api/');
 
-    let payload = null;
-    if (token) {
-        try {
-            payload = (await jwtVerify(token, JWT_SECRET)).payload;
-            // Temporary 2FA tokens must never open a session
-            if (payload.temp) payload = null;
-        } catch {
-            payload = null;
+    // Cross-site CSRF protection: a browser sending a state-changing request from another
+    // origin is refused. Requests without an Origin header (scripts, curl) are allowed.
+    if (isApi && !SAFE_METHODS.has(request.method)) {
+        const origin = request.headers.get('origin');
+        const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+        if (origin) {
+            let originHost = null;
+            try { originHost = new URL(origin).host; } catch { /* invalid origin */ }
+            if (originHost !== host) return NextResponse.json({ error: 'Forbidden origin' }, { status: 403 });
         }
     }
+
+    // Never trust identity headers sent by the client: remove them, then set our own below
+    const requestHeaders = new Headers(request.headers);
+    for (const h of IDENTITY_HEADERS) requestHeaders.delete(h);
+
+    const token = request.cookies.get(COOKIE_NAME)?.value;
+    const resolved = token ? await resolveSession(token, 'full') : null;
+    const user = resolved?.user ?? null;
 
     // Public routes – but bounce already-authenticated users away from /login
     if (PUBLIC_PATHS.has(pathname)) {
-        if (pathname === '/login' && payload) {
-            return NextResponse.redirect(new URL(`/dashboard/${payload.role}`, request.url));
+        if (pathname === '/login' && user) {
+            return NextResponse.redirect(new URL(`/dashboard/${user.role}`, request.url));
         }
-        return NextResponse.next();
+        return NextResponse.next({ request: { headers: requestHeaders } });
     }
 
-    if (!payload) {
-        if (pathname.startsWith('/api/')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) {
+        if (isApi) {
+            const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            if (token) res.cookies.set(COOKIE_NAME, '', cookieOptions(request, 0));
+            return res;
         }
         const login = new URL('/login', request.url);
         if (pathname !== '/') login.searchParams.set('next', pathname);
         const response = NextResponse.redirect(login);
-        if (token) response.cookies.delete('auth-token');
+        if (token) response.cookies.set(COOKIE_NAME, '', cookieOptions(request, 0));
         return response;
     }
 
     if (pathname === '/' || pathname === '/dashboard') {
-        return NextResponse.redirect(new URL(`/dashboard/${payload.role}`, request.url));
+        return NextResponse.redirect(new URL(`/dashboard/${user.role}`, request.url));
     }
 
     // Role guard for /dashboard/<role>/...  (shared pages like /dashboard/settings are allowed)
     if (pathname.startsWith('/dashboard/')) {
         const section = pathname.split('/')[2];
         const roles = ['admin', 'teacher', 'student'];
-        if (roles.includes(section) && section !== payload.role) {
-            return NextResponse.redirect(new URL(`/dashboard/${payload.role}`, request.url));
+        if (roles.includes(section) && section !== user.role) {
+            return NextResponse.redirect(new URL(`/dashboard/${user.role}`, request.url));
         }
     }
 
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-user-id', String(payload.id));
-    requestHeaders.set('x-user-role', payload.role);
-    requestHeaders.set('x-user-name', encodeURIComponent(payload.fullName || ''));
+    requestHeaders.set('x-user-id', String(user.id));
+    requestHeaders.set('x-user-role', user.role);
+    requestHeaders.set('x-user-name', encodeURIComponent(user.full_name || ''));
+    requestHeaders.set('x-session-id', String(resolved.sessionId));
     return NextResponse.next({ request: { headers: requestHeaders } });
 }
 

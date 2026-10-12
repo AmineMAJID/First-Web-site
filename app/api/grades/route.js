@@ -1,6 +1,6 @@
-// Grades API – GET, POST (bulk upsert)
-import { getDb } from '@/lib/db';
-import { json, error, readJson, requireRole, clampStr } from '@/lib/api';
+// Grades API – GET, POST (bulk upsert), DELETE
+import { db, tx } from '@/lib/db';
+import { json, error, readJson, requireRole, clampStr, parseId } from '@/lib/api';
 
 const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name,
                      tu.full_name AS teacher_name
@@ -13,7 +13,6 @@ const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_c
 export async function GET(request) {
     const { session, response } = requireRole(request);
     if (response) return response;
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('studentId');
     const term = searchParams.get('term');
@@ -24,19 +23,23 @@ export async function GET(request) {
     const params = [];
 
     if (session.role === 'student') {
-        const student = db.prepare('SELECT id FROM students WHERE user_id = ?').get(session.id);
+        const student = await db.get('SELECT id FROM students WHERE user_id = ?', [session.id]);
         if (!student) return json([]);
         where.push('g.student_id = ?');
         params.push(student.id);
     } else {
-        if (studentId) { where.push('g.student_id = ?'); params.push(studentId); }
+        if (studentId) {
+            if (!parseId(studentId)) return json([]);
+            where.push('g.student_id = ?');
+            params.push(parseId(studentId));
+        }
         if (className) { where.push('s.class_name = ?'); params.push(className); }
     }
     if (term) { where.push('g.term = ?'); params.push(term); }
     if (subject) { where.push('g.subject = ?'); params.push(subject); }
 
     const sql = `${BASE} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY u.full_name, g.term, g.subject`;
-    return json(db.prepare(sql).all(...params));
+    return json(await db.all(sql, params));
 }
 
 export async function POST(request) {
@@ -46,38 +49,37 @@ export async function POST(request) {
     const body = await readJson(request);
     const grades = Array.isArray(body?.grades) ? body.grades : null;
     if (!grades || grades.length === 0) return error('grades[] is required');
+    if (grades.length > 500) return error('Too many grades in one request (max 500)');
 
-    const db = getDb();
     let teacherId = null;
     if (session.role === 'teacher') {
-        teacherId = db.prepare('SELECT id FROM teachers WHERE user_id = ?').get(session.id)?.id ?? null;
+        teacherId = (await db.get('SELECT id FROM teachers WHERE user_id = ?', [session.id]))?.id ?? null;
     }
 
     // Validate everything first
     for (const g of grades) {
         const grade = Number(g.grade);
         const max = Number(g.maxGrade ?? 100);
-        if (!Number.isInteger(Number(g.studentId))) return error('Invalid studentId');
+        if (!parseId(g.studentId)) return error('Invalid studentId');
         if (!clampStr(g.subject, 60)) return error('Subject is required');
+        if (!Number.isFinite(max) || max <= 0) return error('Invalid maxGrade');
         if (!Number.isFinite(grade) || grade < 0 || grade > max) return error(`Grade must be between 0 and ${max}`);
     }
 
-    const upsert = db.prepare(`
-        INSERT INTO grades (student_id, teacher_id, subject, grade, max_grade, term, remarks)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(student_id, subject, term) DO UPDATE SET
-            grade = excluded.grade, max_grade = excluded.max_grade,
-            teacher_id = COALESCE(excluded.teacher_id, grades.teacher_id),
-            remarks = CASE WHEN excluded.remarks = '' THEN grades.remarks ELSE excluded.remarks END,
-            created_at = CURRENT_TIMESTAMP`);
-
-    const run = db.transaction((items) => {
-        for (const g of items) {
-            upsert.run(Number(g.studentId), teacherId ?? (g.teacherId ?? null), clampStr(g.subject, 60), Number(g.grade),
-                Number(g.maxGrade ?? 100), clampStr(g.term, 30) || 'Term 1', clampStr(g.remarks, 300));
+    await tx(async (t) => {
+        for (const g of grades) {
+            await t.run(`
+                INSERT INTO grades (student_id, teacher_id, subject, grade, max_grade, term, remarks)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (student_id, subject, term) DO UPDATE SET
+                    grade = excluded.grade, max_grade = excluded.max_grade,
+                    teacher_id = COALESCE(excluded.teacher_id, grades.teacher_id),
+                    remarks = CASE WHEN excluded.remarks = '' THEN grades.remarks ELSE excluded.remarks END,
+                    created_at = now()`,
+                [Number(g.studentId), teacherId ?? (parseId(g.teacherId) ?? null), clampStr(g.subject, 60), Number(g.grade),
+                    Number(g.maxGrade ?? 100), clampStr(g.term, 30) || 'Term 1', clampStr(g.remarks, 300)]);
         }
     });
-    run(grades);
     return json({ success: true, count: grades.length });
 }
 
@@ -85,15 +87,14 @@ export async function POST(request) {
 export async function DELETE(request) {
     const { session, response } = requireRole(request, 'teacher', 'admin');
     if (response) return response;
-    const id = new URL(request.url).searchParams.get('id');
+    const id = parseId(new URL(request.url).searchParams.get('id'));
     if (!id) return error('id is required');
-    const db = getDb();
-    const grade = db.prepare('SELECT * FROM grades WHERE id = ?').get(id);
+    const grade = await db.get('SELECT * FROM grades WHERE id = ?', [id]);
     if (!grade) return error('Grade not found', 404);
     if (session.role === 'teacher') {
-        const teacher = db.prepare('SELECT id FROM teachers WHERE user_id = ?').get(session.id);
+        const teacher = await db.get('SELECT id FROM teachers WHERE user_id = ?', [session.id]);
         if (grade.teacher_id && grade.teacher_id !== teacher?.id) return error('Forbidden', 403);
     }
-    db.prepare('DELETE FROM grades WHERE id = ?').run(id);
+    await db.run('DELETE FROM grades WHERE id = ?', [id]);
     return json({ success: true });
 }
