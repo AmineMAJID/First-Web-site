@@ -2,6 +2,7 @@
 import { db } from '@/lib/db';
 import { json, error, readJson, requirePermission, parseId } from '@/lib/api';
 import { DAYS, validateSlot } from '@/lib/schedule';
+import { childStudentIds } from '@/lib/scope';
 
 const ORDER = `CASE sc.day_of_week ${DAYS.map((d, i) => `WHEN '${d}' THEN ${i + 1}`).join(' ')} END, sc.start_time`;
 const BASE = `SELECT sc.*, u.full_name AS teacher_name FROM schedules sc
@@ -17,6 +18,16 @@ export async function GET(request) {
         const student = await db.get('SELECT class_name FROM students WHERE user_id = ?', [session.id]);
         if (!student) return json([]);
         return json(await db.all(`${BASE} WHERE sc.class_name = ? ORDER BY ${ORDER}`, [student.class_name]));
+    }
+    // A parent sees the timetable of the classes of their linked children only
+    const kids = await childStudentIds(session);
+    if (kids) {
+        const rows = await db.all('SELECT DISTINCT class_name FROM students WHERE id = ANY(?)', [kids]);
+        const names = rows.map((r) => r.class_name).filter(Boolean);
+        if (className && !names.includes(className)) return error('Forbidden', 403);
+        const wanted = className ? [className] : names;
+        if (!wanted.length) return json([]);
+        return json(await db.all(`${BASE} WHERE sc.class_name = ANY(?) ORDER BY sc.class_name, ${ORDER}`, [wanted]));
     }
     if (session.role === 'teacher' && !className) {
         const teacher = await db.get('SELECT id FROM teachers WHERE user_id = ?', [session.id]);

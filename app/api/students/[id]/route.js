@@ -4,20 +4,21 @@ import { hashPassword, generateTempPassword } from '@/lib/password';
 import { revokeUserSessions } from '@/lib/session';
 import { json, error, readJson, requirePermission, hasPerm, clampStr, isValidDate, parseId } from '@/lib/api';
 import { currentSchoolYear, resolveClassFor } from '@/lib/school';
-import { attendanceAllowed } from '@/lib/scope';
+import { attendanceAllowed, childStudentIds } from '@/lib/scope';
 
 export async function GET(request, { params }) {
     const { session, response } = requirePermission(request);
     if (response) return response;
     const id = parseId((await params).id);
     if (!id) return error('Student not found', 404);
+    const isChild = !!(await childStudentIds(session))?.includes(id);
 
     const student = await db.get(`
         SELECT u.id AS "userId", u.username, u.full_name, u.email, s.*
         FROM users u JOIN students s ON u.id = s.user_id WHERE s.id = ?`, [id]);
     if (!student) return error('Student not found', 404);
-    if (student.userId !== session.id && !hasPerm(session, 'students.view')) return error('Forbidden', 403);
-    if (student.userId !== session.id && !(await attendanceAllowed(session, student.class_id))) return error('Forbidden', 403);
+    if (!isChild && student.userId !== session.id && !hasPerm(session, 'students.view')) return error('Forbidden', 403);
+    if (!isChild && student.userId !== session.id && !(await attendanceAllowed(session, student.class_id))) return error('Forbidden', 403);
 
     const grades = await db.all('SELECT * FROM grades WHERE student_id = ? ORDER BY term, subject', [id]);
     const attendance = await db.all('SELECT status, COUNT(*) AS count FROM attendance WHERE student_id = ? GROUP BY status', [id]);

@@ -56,6 +56,7 @@ const GROUPS = {
     schedule: { fr: 'Emploi du temps', en: 'Timetable', ar: 'الجدول الزمني' },
     messages: { fr: 'Messagerie', en: 'Messages', ar: 'الرسائل' },
     account: { fr: 'Compte', en: 'Account', ar: 'الحساب' },
+    family: { fr: 'Famille', en: 'Family', ar: 'الأسرة' },
 };
 
 const pick = (obj, lang) => obj?.[lang] || obj?.fr || '';

@@ -2,7 +2,7 @@
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, clampStr, parseId } from '@/lib/api';
 import { currentSchoolYear, termsOf } from '@/lib/school';
-import { visibleClassIds, gradableSubjects, studentClassesById } from '@/lib/scope';
+import { visibleClassIds, gradableSubjects, studentClassesById, childStudentIds } from '@/lib/scope';
 
 const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_code, s.class_name,
                      tu.full_name AS teacher_name
@@ -13,7 +13,7 @@ const BASE = `SELECT g.*, u.full_name AS student_name, s.student_id AS student_c
               LEFT JOIN users tu ON t.user_id = tu.id`;
 
 export async function GET(request) {
-    const { session, response } = requirePermission(request, 'grades.record', 'grades.view_all', 'grades.view_own');
+    const { session, response } = requirePermission(request, 'grades.record', 'grades.view_all', 'grades.view_own', 'children.view');
     if (response) return response;
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('studentId');
@@ -26,8 +26,14 @@ export async function GET(request) {
     const where = ['g.school_year_id = ?'];
     const params = [year.id];
 
-    // Reading all grades needs grades.view_all (or grades.record); otherwise only the account's own grades
-    if (!hasPerm(session, 'grades.record') && !hasPerm(session, 'grades.view_all')) {
+    // A parent sees the grades of their linked children only
+    const kids = await childStudentIds(session);
+    if (kids) {
+        where.push('g.student_id = ANY(?)');
+        params.push(kids);
+        if (parseId(studentId)) { where.push('g.student_id = ?'); params.push(parseId(studentId)); }
+    } else if (!hasPerm(session, 'grades.record') && !hasPerm(session, 'grades.view_all')) {
+        // Reading all grades needs grades.view_all (or grades.record); otherwise only the account's own grades
         const student = await db.get('SELECT id FROM students WHERE user_id = ?', [session.id]);
         if (!student) return json([]);
         where.push('g.student_id = ?');

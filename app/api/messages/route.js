@@ -1,6 +1,7 @@
 // Messages API – GET (inbox + sent), POST (send)
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, clampStr } from '@/lib/api';
+import { visibleClassIds } from '@/lib/scope';
 
 export async function GET(request) {
     const { session, response } = requirePermission(request, 'messages.view');
@@ -57,9 +58,11 @@ export async function POST(request) {
     const { recipientRole, recipientIds = [], recipientClasses = [], isAnnouncement } = body;
 
     if (isAnnouncement) {
-        if (!['student', 'teacher'].includes(recipientRole)) return error('Invalid recipient role');
+        if (!['student', 'teacher', 'parent'].includes(recipientRole)) return error('Invalid recipient role');
+        // Parents only write to the administration; they never receive class broadcasts
         // Only the administrator may address teachers; everyone else may only write to students
         if (session.role !== 'admin' && recipientRole !== 'student') return error('Forbidden', 403);
+        if (session.role === 'parent') return error('Forbidden', 403);
         await db.run(`INSERT INTO messages (sender_id, recipient_role, subject, body, is_announcement) VALUES (?, ?, ?, ?, TRUE)`,
             [session.id, recipientRole, subject, messageBody]);
         return json({ success: true, count: 1 }, 201);
@@ -70,7 +73,11 @@ export async function POST(request) {
         const classes = recipientClasses.map((c) => clampStr(c, 50)).filter(Boolean);
         if (classes.length) {
             const placeholders = classes.map(() => '?').join(',');
-            for (const s of await db.all(`SELECT user_id FROM students WHERE class_name IN (${placeholders})`, classes)) {
+            // A teacher can only message the students of their own classes
+            const visible = await visibleClassIds(session);
+            const params = visible ? [...classes, visible] : classes;
+            const scope = visible ? ' AND class_id = ANY(?)' : '';
+            for (const s of await db.all(`SELECT user_id FROM students WHERE class_name IN (${placeholders})${scope}`, params)) {
                 targets.add(s.user_id);
             }
         }
@@ -83,7 +90,9 @@ export async function POST(request) {
     const placeholders = ids.map(() => '?').join(',');
     const users = await db.all(`SELECT id, role FROM users WHERE id IN (${placeholders})`, ids);
     if (users.length !== ids.length) return error('Unknown recipient');
-    if (session.role !== 'admin' && users.some((u) => !['student', 'admin'].includes(u.role))) return error('Forbidden', 403);
+    // Parents may only write to administrators. Other non-admin senders may write to students and administrators.
+    const allowedRoles = session.role === 'parent' ? ['admin'] : ['student', 'admin'];
+    if (session.role !== 'admin' && users.some((u) => !allowedRoles.includes(u.role))) return error('Forbidden', 403);
 
     await tx(async (t) => {
         for (const id of ids) {

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen, ClipboardCheck, User, Phone, MapPin, Users } from 'lucide-react';
 import { useLanguage } from '@/lib/LanguageContext';
 import { api, gradeColor, gradeBadge, subjectColor } from '@/lib/client';
+import ParentsCard from '@/components/ParentsCard';
 
 export default function StudentProfile() {
     const { id } = useParams();
@@ -87,6 +88,7 @@ export default function StudentProfile() {
                     </table>
                 </div>
             </div>
+            <ParentsCard studentId={id} />
         </div>
     );
 }

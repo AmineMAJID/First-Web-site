@@ -2,12 +2,12 @@
 import { db, tx } from '@/lib/db';
 import { json, error, readJson, requirePermission, hasPerm, isValidDate, clampStr, parseId } from '@/lib/api';
 import { currentSchoolYear } from '@/lib/school';
-import { visibleClassIds, attendanceAllowed, studentClassesById } from '@/lib/scope';
+import { visibleClassIds, attendanceAllowed, studentClassesById, childStudentIds } from '@/lib/scope';
 
 const STATUSES = new Set(['present', 'absent', 'late', 'excused']);
 
 export async function GET(request) {
-    const { session, response } = requirePermission(request, 'attendance.record', 'attendance.view_all', 'attendance.view_own');
+    const { session, response } = requirePermission(request, 'attendance.record', 'attendance.view_all', 'attendance.view_own', 'children.view');
     if (response) return response;
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date');
@@ -20,8 +20,14 @@ export async function GET(request) {
     if (!year) return json([]);
     const where = ['a.school_year_id = ?'];
     const params = [year.id];
-    // Reading all records needs attendance.view_all (or attendance.record); otherwise only the account's own
-    if (!hasPerm(session, 'attendance.record') && !hasPerm(session, 'attendance.view_all')) {
+    // A parent sees the attendance of their linked children only
+    const kids = await childStudentIds(session);
+    if (kids) {
+        where.push('a.student_id = ANY(?)');
+        params.push(kids);
+        if (parseId(studentId)) { where.push('a.student_id = ?'); params.push(parseId(studentId)); }
+    } else if (!hasPerm(session, 'attendance.record') && !hasPerm(session, 'attendance.view_all')) {
+        // Reading all records needs attendance.view_all (or attendance.record); otherwise only the account's own
         const student = await db.get('SELECT id FROM students WHERE user_id = ?', [session.id]);
         if (!student) return json([]);
         where.push('a.student_id = ?');
