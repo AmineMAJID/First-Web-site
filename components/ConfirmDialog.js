@@ -1,10 +1,12 @@
 'use client';
 
 import { AlertTriangle } from 'lucide-react';
+import Portal from './Portal';
 
 export default function ConfirmDialog({ open, title, message, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false, onConfirm, onCancel }) {
     if (!open) return null;
     return (
+        <Portal>
         <div className="modal-overlay" onClick={onCancel}>
             <div className="modal" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
                 <div className="modal-body" style={{ textAlign: 'center', padding: '28px 24px 8px' }}>
@@ -20,5 +22,6 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'OK
                 </div>
             </div>
         </div>
+        </Portal>
     );
 }

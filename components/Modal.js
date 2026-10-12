@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
+import Portal from './Portal';
 
 export default function Modal({ open, title, onClose, children, footer, width }) {
     useEffect(() => {
@@ -13,6 +14,7 @@ export default function Modal({ open, title, onClose, children, footer, width })
 
     if (!open) return null;
     return (
+        <Portal>
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal" style={width ? { maxWidth: width } : undefined} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
                 <div className="modal-header">
@@ -23,5 +25,6 @@ export default function Modal({ open, title, onClose, children, footer, width })
                 {footer && <div className="modal-footer">{footer}</div>}
             </div>
         </div>
+        </Portal>
     );
 }
