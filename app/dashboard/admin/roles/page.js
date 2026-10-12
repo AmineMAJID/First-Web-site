@@ -190,7 +190,7 @@ export default function AdminRoles() {
                                 </div>
                                 <div className="form-group">
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <input type="checkbox" style={{ width: 'auto' }} checked={draft.requiresTwoFactor} disabled={role.locked}
+                                        <input type="checkbox" checked={draft.requiresTwoFactor} disabled={role.locked}
                                             onChange={(e) => setDraft({ ...draft, requiresTwoFactor: e.target.checked })} /> {s.requires2fa}
                                     </label>
                                 </div>
@@ -208,7 +208,7 @@ export default function AdminRoles() {
                                         const disabled = role.locked || f.alwaysOn || adminOnly;
                                         return (
                                             <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '10px', background: 'var(--bg-hover)', marginBottom: '6px', cursor: disabled ? 'default' : 'pointer', opacity: adminOnly ? 0.6 : 1 }}>
-                                                <input type="checkbox" style={{ width: 'auto' }} checked={checked || f.alwaysOn} disabled={disabled} onChange={() => toggle(f.key)} />
+                                                <input type="checkbox" checked={checked || f.alwaysOn} disabled={disabled} onChange={() => toggle(f.key)} />
                                                 <span style={{ flex: 1 }}>{pick(f.label, language)}</span>
                                                 {f.alwaysOn && <small style={{ color: 'var(--text-muted)' }}>{s.alwaysOn}</small>}
                                                 {adminOnly && <small style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}><Lock size={12} /> {s.adminOnly}</small>}
@@ -247,7 +247,7 @@ export default function AdminRoles() {
                         </div>
                         <div className="form-group">
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="checkbox" style={{ width: 'auto' }} checked={newRole.requiresTwoFactor} onChange={(e) => setNewRole({ ...newRole, requiresTwoFactor: e.target.checked })} /> {s.requires2fa}
+                                <input type="checkbox" checked={newRole.requiresTwoFactor} onChange={(e) => setNewRole({ ...newRole, requiresTwoFactor: e.target.checked })} /> {s.requires2fa}
                             </label>
                         </div>
                     </div>
