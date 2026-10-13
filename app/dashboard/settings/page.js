@@ -6,6 +6,7 @@ import { useLanguage } from '@/lib/LanguageContext';
 import { useUser, useTheme } from '../layout';
 import { useToast } from '@/components/Toast';
 import { api } from '@/lib/client';
+import { RecoveryCodesCard, SessionsCard } from '@/components/AccountSecurity';
 
 export default function SettingsPage() {
     const { t, language, changeLanguage } = useLanguage();
@@ -126,6 +127,10 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginTop: '20px' }}>
+                {user?.has2fa && <RecoveryCodesCard />}
+                <SessionsCard />
             </div>
         </div>
     );

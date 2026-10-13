@@ -8,6 +8,7 @@ import { publicUser, cookieOptions, COOKIE_NAME, MFA_COOKIE, SESSION_HOURS } fro
 import { resolveSession, createSession, deleteSessionByToken } from '@/lib/session';
 import { recordEvent, mfaFailureCount, clientIp, userAgent } from '@/lib/security';
 import { json, error, readJson } from '@/lib/api';
+import { consumeRecoveryCode } from '@/lib/recovery';
 import { landingFor } from '@/lib/permissions';
 
 export async function POST(request) {
@@ -24,8 +25,9 @@ export async function POST(request) {
         const { user } = pending;
 
         const body = await readJson(request);
+        const recoveryCode = typeof body?.recoveryCode === 'string' ? body.recoveryCode : null;
         const code = String(body?.code || '').replace(/\s+/g, '');
-        if (!/^\d{6}$/.test(code)) return error('A 6-digit code is required');
+        if (!recoveryCode && !/^\d{6}$/.test(code)) return error('A 6-digit code is required');
 
         if ((await mfaFailureCount(user.id)) >= 5) {
             await deleteSessionByToken(mfaToken);
@@ -37,30 +39,40 @@ export async function POST(request) {
 
         const enrolling = !user.two_factor_secret;
         if (enrolling && !pending.pendingSecret) return error('2FA setup has not been started', 400);
-        const secret = enrolling ? decryptSecret(pending.pendingSecret) : decryptSecret(user.two_factor_secret);
 
-        const step = matchTotp(secret, code, enrolling ? null : user.two_factor_last_step);
-        if (step === null) {
-            await recordEvent('mfa_failed', { username: user.username, userId: user.id, ip, ua });
-            return error('Invalid 2FA code', 401);
-        }
-
-        // Consume the time step atomically: the same code can never be used twice
-        if (enrolling) {
-            const r = await db.run(
-                'UPDATE users SET two_factor_secret = ?, two_factor_last_step = ?, updated_at = now() WHERE id = ? AND two_factor_secret IS NULL',
-                [encryptSecret(secret), step, user.id],
-            );
-            if (r.rowCount !== 1) return error('2FA is already configured', 409);
-            await recordEvent('2fa_enrolled', { username: user.username, userId: user.id, ip, ua });
+        // Recovery code: single use, only for accounts already enrolled (no time step involved)
+        if (recoveryCode) {
+            if (enrolling || !(await consumeRecoveryCode(user.id, recoveryCode))) {
+                await recordEvent('mfa_failed', { username: user.username, userId: user.id, ip, ua });
+                return error('Invalid recovery code', 401);
+            }
+            await recordEvent('recovery_code_used', { username: user.username, userId: user.id, ip, ua });
         } else {
-            const r = await db.run(
-                'UPDATE users SET two_factor_last_step = ? WHERE id = ? AND (two_factor_last_step IS NULL OR two_factor_last_step < ?)',
-                [step, user.id, step],
-            );
-            if (r.rowCount !== 1) {
+            const secret = enrolling ? decryptSecret(pending.pendingSecret) : decryptSecret(user.two_factor_secret);
+
+            const step = matchTotp(secret, code, enrolling ? null : user.two_factor_last_step);
+            if (step === null) {
                 await recordEvent('mfa_failed', { username: user.username, userId: user.id, ip, ua });
                 return error('Invalid 2FA code', 401);
+            }
+
+            // Consume the time step atomically: the same code can never be used twice
+            if (enrolling) {
+                const r = await db.run(
+                    'UPDATE users SET two_factor_secret = ?, two_factor_last_step = ?, updated_at = now() WHERE id = ? AND two_factor_secret IS NULL',
+                    [encryptSecret(secret), step, user.id],
+                );
+                if (r.rowCount !== 1) return error('2FA is already configured', 409);
+                await recordEvent('2fa_enrolled', { username: user.username, userId: user.id, ip, ua });
+            } else {
+                const r = await db.run(
+                    'UPDATE users SET two_factor_last_step = ? WHERE id = ? AND (two_factor_last_step IS NULL OR two_factor_last_step < ?)',
+                    [step, user.id, step],
+                );
+                if (r.rowCount !== 1) {
+                    await recordEvent('mfa_failed', { username: user.username, userId: user.id, ip, ua });
+                    return error('Invalid 2FA code', 401);
+                }
             }
         }
 

@@ -30,6 +30,8 @@ function LoginForm() {
     const [qrCode, setQrCode] = useState('');
     const [setupSecret, setSetupSecret] = useState('');
     const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [useRecovery, setUseRecovery] = useState(false);
+    const [recoveryCode, setRecoveryCode] = useState('');
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', localStorage.getItem('portal-theme') || 'light');
@@ -90,7 +92,7 @@ function LoginForm() {
             const res = await fetch('/api/auth/verify-2fa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: twoFactorCode }),
+                body: JSON.stringify(useRecovery ? { recoveryCode } : { code: twoFactorCode }),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -125,20 +127,39 @@ function LoginForm() {
 
     const codeInput = (
         <div className="form-group">
-            <label htmlFor="code">{t.login_extra.code}</label>
-            <input
-                id="code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="000000"
-                value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                maxLength={6}
-                autoFocus
-                style={{ textAlign: 'center', letterSpacing: '8px', fontSize: '1.5rem', fontWeight: 'bold', direction: 'ltr' }}
-                required
-            />
+            <label htmlFor="code">{useRecovery ? 'Code de secours' : t.login_extra.code}</label>
+            {useRecovery ? (
+                <input
+                    id="code"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="XXXX-XXXX"
+                    value={recoveryCode}
+                    onChange={(e) => setRecoveryCode(e.target.value.toUpperCase().slice(0, 12))}
+                    maxLength={12}
+                    autoFocus
+                    style={{ textAlign: 'center', letterSpacing: '4px', fontSize: '1.2rem', fontWeight: 'bold', direction: 'ltr' }}
+                    required
+                />
+            ) : (
+                <input
+                    id="code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    maxLength={6}
+                    autoFocus
+                    style={{ textAlign: 'center', letterSpacing: '8px', fontSize: '1.5rem', fontWeight: 'bold', direction: 'ltr' }}
+                    required
+                />
+            )}
+            <button type="button" onClick={() => { setUseRecovery((v) => !v); setError(''); }}
+                style={{ background: 'none', border: 'none', color: 'var(--primary, #3b82f6)', cursor: 'pointer', marginTop: '8px', padding: 0, textDecoration: 'underline' }}>
+                {useRecovery ? 'Utiliser le code de l’application' : 'Je n’ai plus mon téléphone : utiliser un code de secours'}
+            </button>
         </div>
     );
 
