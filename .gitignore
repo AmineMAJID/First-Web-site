@@ -49,3 +49,6 @@ portal_debug.log
 
 # keep the environment template versioned
 !.env.example
+
+# database backups (may contain personal data: never commit)
+/backups/
