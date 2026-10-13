@@ -70,7 +70,7 @@ export default function NotificationBell() {
             </button>
             {open && (
                 <div role="menu" style={{
-                    position: 'absolute', right: 0, top: '100%', width: 340, maxHeight: 420, overflowY: 'auto', zIndex: 60,
+                    position: 'absolute', right: 0, top: '100%', width: 'min(340px, calc(100vw - 32px))', maxHeight: 420, overflowY: 'auto', zIndex: 60,
                     background: 'var(--bg-card, #fff)', color: 'var(--text, #111)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12,
                     boxShadow: '0 10px 30px rgba(0,0,0,.15)',
                 }}>

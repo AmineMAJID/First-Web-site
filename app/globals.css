@@ -848,3 +848,51 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .slot .slot-subject { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); }
 .slot .slot-meta { font-size: 0.75rem; color: var(--text-secondary); }
 .slot.today { box-shadow: 0 0 0 2px var(--primary-200); }
+
+/* === Mobile (phones and small tablets) === */
+@media (max-width: 768px) {
+  /* Modals open as a bottom sheet, fully visible without scrolling the page behind them */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+  }
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* Touch targets at least 40px, and inputs at 16px so iOS does not zoom when focused */
+  .btn {
+    min-height: 40px;
+  }
+  .btn-sm {
+    min-height: 34px;
+  }
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Stat and filter grids use one column on narrow screens */
+  .stagger {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Very narrow phones (320–380px) */
+@media (max-width: 380px) {
+  .portal-main > main {
+    padding: 12px !important;
+  }
+  .card {
+    padding: 16px !important;
+  }
+}
