@@ -5,14 +5,17 @@ import Link from 'next/link';
 import { Users, GraduationCap, ClipboardCheck, TrendingUp, BookOpen, Calendar, UserPlus, BarChart3, AlertTriangle, MessageSquare } from 'lucide-react';
 import { useLanguage } from '@/lib/LanguageContext';
 import { api, gradeColor, subjectColor } from '@/lib/client';
+import { CheckSquare } from 'lucide-react';
 
 export default function AdminDashboard() {
     const { t } = useLanguage();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [today, setToday] = useState(null);
 
     useEffect(() => {
         api('/api/reports').then(setStats).catch(() => {}).finally(() => setLoading(false));
+        api('/api/dashboard/admin').then(setToday).catch(() => {});
     }, []);
 
     if (loading) return <div className="loading-page"><div className="spinner" /></div>;
@@ -26,6 +29,8 @@ export default function AdminDashboard() {
 
     return (
         <div>
+            {today && <TodayPanel today={today} />}
+
             {/* Stats Cards */}
             <div style={styles.statsGrid} className="stagger">
                 {cards.map((card, i) => {
@@ -212,3 +217,42 @@ const styles = {
         transition: 'width 1s ease',
     },
 };
+
+// What needs attention today: absences, late arrivals, unread messages, pending tasks
+function TodayPanel({ today }) {
+    const box = { padding: '18px', flex: '1 1 260px' };
+    const list = (rows, empty) => rows.length === 0
+        ? <p style={{ color: 'var(--text-muted)' }}>{empty}</p>
+        : <ul style={{ margin: 0, paddingLeft: '18px' }}>{rows.slice(0, 8).map((r) => (
+            <li key={r.studentId}><Link href={`/dashboard/admin/students/${r.studentId}`}>{r.studentName}</Link> <span style={{ color: 'var(--text-muted)' }}>{r.className || ''}</span></li>
+        ))}{rows.length > 8 && <li>… et {rows.length - 8} autre(s)</li>}</ul>;
+
+    return (
+        <section aria-label="Aujourd’hui" style={{ marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '1.1rem', marginBottom: '12px' }}>Aujourd&apos;hui · {today.date}</h2>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div className="card" style={box}>
+                    <strong>Absences ({today.absent.length})</strong>
+                    <div style={{ marginTop: '8px' }}>{list(today.absent, 'Aucune absence signalée.')}</div>
+                </div>
+                <div className="card" style={box}>
+                    <strong>Retards ({today.late.length})</strong>
+                    <div style={{ marginTop: '8px' }}>{list(today.late, 'Aucun retard signalé.')}</div>
+                </div>
+                <div className="card" style={box}>
+                    <strong><MessageSquare size={16} style={{ verticalAlign: 'text-bottom' }} /> Messages non lus</strong>
+                    <p style={{ fontSize: '1.6rem', fontWeight: 700, margin: '8px 0' }}>{today.unreadMessages}</p>
+                    <Link href="/dashboard/messages">Ouvrir la messagerie</Link>
+                </div>
+                <div className="card" style={box}>
+                    <strong><CheckSquare size={16} style={{ verticalAlign: 'text-bottom' }} /> À traiter</strong>
+                    {today.tasks.length === 0
+                        ? <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>Rien en attente.</p>
+                        : <ul style={{ margin: '8px 0 0', paddingLeft: '18px' }}>{today.tasks.map((task) => (
+                            <li key={task.key}><Link href={task.href}>{task.label}</Link> : {task.count}</li>
+                        ))}</ul>}
+                </div>
+            </div>
+        </section>
+    );
+}
